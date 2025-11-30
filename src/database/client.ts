@@ -3,6 +3,7 @@ import Database from 'better-sqlite3';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import * as schema from '@/database/schema.js';
 import { config } from '@/config/index.js';
+import { logger } from '@/core/logger.js';
 import { existsSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
 
@@ -27,7 +28,7 @@ export function getDatabase(): BetterSQLite3Database<typeof schema> {
     // Create Drizzle instance
     db = drizzle(sqlite, { schema });
 
-    console.info(`Database connected: ${dbPath}`);
+    logger.info({ dbPath }, 'Database connected');
   }
 
   return db;
@@ -40,7 +41,7 @@ export function closeDatabase(): void {
     const sqlite = (db as any).session.client as Database.Database;
     sqlite.close();
     db = null;
-    console.info('Database closed');
+    logger.info('Database closed');
   }
 }
 
@@ -98,7 +99,7 @@ export async function initializeDatabase(): Promise<void> {
     ON conversations(user_id);
   `);
 
-  console.info('Database schema initialized');
+  logger.info('Database schema initialized');
 }
 
 export default getDatabase;

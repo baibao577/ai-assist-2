@@ -3,6 +3,7 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import ora from 'ora';
 import { initializeDatabase, closeDatabase } from '@/database/client.js';
+import { logger } from '@/core/logger.js';
 
 export function registerDbCommand(program: Command): void {
   const dbCmd = program.command('db').description('Database management commands');
@@ -22,13 +23,18 @@ async function executeInit(): Promise<void> {
     await initializeDatabase();
     spinner.succeed(chalk.green('Database initialized successfully!'));
 
+    logger.info('Database tables created: conversations, messages');
+
     console.info(chalk.cyan('\nCreated tables:'));
     console.info('  - conversations');
     console.info('  - messages');
     console.info('');
   } catch (error) {
+    const err = error as Error;
+    logger.error({ error: err.message, stack: err.stack }, 'Database initialization failed');
+
     spinner.fail(chalk.red('Failed to initialize database'));
-    console.error(chalk.red('Error:'), (error as Error).message);
+    console.error(chalk.red('Error:'), err.message);
     process.exit(1);
   } finally {
     closeDatabase();

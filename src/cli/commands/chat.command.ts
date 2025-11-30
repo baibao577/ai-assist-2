@@ -4,6 +4,7 @@ import inquirer from 'inquirer';
 import chalk from 'chalk';
 import ora from 'ora';
 import { pipeline } from '@/core/pipeline.js';
+import { logger } from '@/core/logger.js';
 import type { PipelineContext } from '@/types/index.js';
 
 interface ChatOptions {
@@ -69,6 +70,15 @@ async function executeChat(options: ChatOptions): Promise<void> {
       // Capture conversation ID from result for subsequent messages
       conversationId = result.conversationId;
 
+      logger.debug(
+        {
+          conversationId,
+          messageId: result.messageId,
+          processingTime: result.processingTime,
+        },
+        'Message processed successfully'
+      );
+
       spinner.succeed(chalk.gray(`(${result.processingTime}ms)`));
 
       // Display response
@@ -86,11 +96,14 @@ async function executeChat(options: ChatOptions): Promise<void> {
         console.info('');
       }
     } catch (error) {
-      console.error(chalk.red('\n❌ Error:'), (error as Error).message);
+      const err = error as Error;
+      logger.error({ error: err.message, stack: err.stack }, 'Chat error');
+
+      console.error(chalk.red('\n❌ Error:'), err.message);
       console.info('');
 
-      if (options.debug && error instanceof Error) {
-        console.error(chalk.red('Stack:'), error.stack);
+      if (options.debug) {
+        console.error(chalk.red('Stack:'), err.stack);
       }
     }
   }
