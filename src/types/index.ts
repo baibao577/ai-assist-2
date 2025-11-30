@@ -108,3 +108,7 @@ export class DatabaseError extends Error {
     this.name = 'DatabaseError';
   }
 }
+
+// Re-export mode and state types
+export * from './modes.js';
+export * from './state.js';

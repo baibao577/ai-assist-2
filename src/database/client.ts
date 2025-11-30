@@ -99,7 +99,33 @@ export async function initializeDatabase(): Promise<void> {
     ON conversations(user_id);
   `);
 
-  logger.info('Database schema initialized');
+  // Create conversation_states table (MVP v2)
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS conversation_states (
+      id TEXT PRIMARY KEY,
+      conversation_id TEXT NOT NULL,
+      mode TEXT NOT NULL,
+      context_elements TEXT NOT NULL,
+      goals TEXT NOT NULL,
+      last_activity_at INTEGER NOT NULL,
+      metadata TEXT,
+      created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+    );
+  `);
+
+  // Create indexes for conversation_states
+  sqlite.exec(`
+    CREATE INDEX IF NOT EXISTS idx_states_conversation
+    ON conversation_states(conversation_id);
+  `);
+
+  sqlite.exec(`
+    CREATE INDEX IF NOT EXISTS idx_states_created
+    ON conversation_states(created_at DESC);
+  `);
+
+  logger.info('Database schema initialized (MVP v2)');
 }
 
 export default getDatabase;
