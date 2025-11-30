@@ -26,7 +26,7 @@ export function registerChatCommand(program: Command): void {
 }
 
 async function executeChat(options: ChatOptions): Promise<void> {
-  console.info(chalk.blue('\n🤖 AI Assistant Ready (MVP v1)\n'));
+  console.info(chalk.blue('\n🤖 AI Assistant Ready (MVP v2)\n'));
   console.info(chalk.gray('Type "exit" or "quit" to end the conversation\n'));
 
   const userId = options.user ?? 'cli-user';

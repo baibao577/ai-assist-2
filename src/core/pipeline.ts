@@ -1,40 +1,100 @@
-// Simple Pipeline for MVP v1
-// Stages: Load → LLM Call → Save
+// Pipeline for MVP v2
+// Stages: Load → Decay → Mode Detection → Handle → Save
 
 import { v4 as uuidv4 } from 'uuid';
-import { conversationRepository, messageRepository } from '@/database/repositories/index.js';
-import { llmService } from '@/core/llm.service.js';
+import {
+  conversationRepository,
+  messageRepository,
+  stateRepository,
+} from '@/database/repositories/index.js';
+import { modeDetector } from '@/core/mode-detector.js';
+import { decayStage } from '@/core/stages/decay.stage.js';
+import { consultHandler } from '@/core/modes/consult.handler.js';
+import { smalltalkHandler } from '@/core/modes/smalltalk.handler.js';
+import { metaHandler } from '@/core/modes/meta.handler.js';
+import { logger } from '@/core/logger.js';
 import {
   PipelineError,
   MessageRole,
   ConversationStatus,
+  ConversationMode,
   type PipelineContext,
   type PipelineResult,
   type Conversation,
   type Message,
+  type ConversationState,
+  type IModeHandler,
 } from '@/types/index.js';
 
 export class Pipeline {
+  private modeHandlers: Map<ConversationMode, IModeHandler>;
+
+  constructor() {
+    // Register mode handlers
+    this.modeHandlers = new Map<ConversationMode, IModeHandler>();
+    this.modeHandlers.set(ConversationMode.CONSULT, consultHandler);
+    this.modeHandlers.set(ConversationMode.SMALLTALK, smalltalkHandler);
+    this.modeHandlers.set(ConversationMode.META, metaHandler);
+  }
+
   /**
-   * Execute the full pipeline for a user message
+   * Execute the full pipeline for a user message (MVP v2)
+   * Stages: Load → Decay → Mode Detection → Handle → Save
    */
   async execute(context: PipelineContext): Promise<PipelineResult> {
     const startTime = Date.now();
 
     try {
-      // Stage 1: Load conversation and messages
-      const { conversation, messages } = await this.loadStage(context);
+      // Stage 1: Load conversation, messages, and state
+      const { conversation, messages, state } = await this.loadStage(context);
 
-      // Stage 2: Generate LLM response
-      const response = await this.llmStage(messages, context.message);
+      // Stage 2: Apply decay to state
+      const decayedState = decayStage.applyDecay(state);
 
-      // Stage 3: Save messages
-      const messageId = await this.saveStage(conversation.id, context.message, response);
+      // Stage 3: Detect conversation mode
+      const modeDetection = await modeDetector.detectMode(
+        context.message,
+        messages,
+        decayedState.mode
+      );
+
+      logger.info(
+        {
+          conversationId: conversation.id,
+          detectedMode: modeDetection.mode,
+          previousMode: decayedState.mode,
+        },
+        'Mode detection complete'
+      );
+
+      // Stage 4: Handle message with appropriate mode handler
+      const handler = this.modeHandlers.get(modeDetection.mode);
+      if (!handler) {
+        throw new Error(`No handler found for mode: ${modeDetection.mode}`);
+      }
+
+      const handlerResult = await handler.handle({
+        conversationId: conversation.id,
+        userId: context.userId,
+        message: context.message,
+        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        currentMode: modeDetection.mode,
+        state: decayedState as any,
+      });
+
+      // Stage 5: Save messages and updated state
+      const messageId = await this.saveStage(
+        conversation.id,
+        context.message,
+        handlerResult.response,
+        decayedState,
+        modeDetection.mode
+      );
 
       const processingTime = Date.now() - startTime;
 
       return {
-        response,
+        response: handlerResult.response,
         processingTime,
         messageId,
         conversationId: conversation.id,
@@ -45,11 +105,11 @@ export class Pipeline {
   }
 
   /**
-   * Load Stage: Load or create conversation and retrieve recent messages
+   * Load Stage: Load or create conversation, messages, and state (MVP v2)
    */
   private async loadStage(
     context: PipelineContext
-  ): Promise<{ conversation: Conversation; messages: Message[] }> {
+  ): Promise<{ conversation: Conversation; messages: Message[]; state: ConversationState }> {
     try {
       let conversation: Conversation | null;
 
@@ -58,7 +118,9 @@ export class Pipeline {
         conversation = await conversationRepository.findById(context.conversationId);
       } else {
         // Find active conversation for user
-        const activeConversations = await conversationRepository.findActiveByUserId(context.userId);
+        const activeConversations = await conversationRepository.findActiveByUserId(
+          context.userId
+        );
         conversation = activeConversations[0] ?? null;
       }
 
@@ -79,30 +141,36 @@ export class Pipeline {
       // Load recent messages (last 10 for context)
       const messages = await messageRepository.getRecentMessages(conversation.id, 10);
 
-      return { conversation, messages };
+      // Load or initialize conversation state
+      let state = await stateRepository.getLatestByConversationId(conversation.id);
+
+      if (!state) {
+        // Initialize new state with SMALLTALK as default mode
+        state = await stateRepository.create({
+          id: uuidv4(),
+          conversationId: conversation.id,
+          mode: ConversationMode.SMALLTALK,
+          contextElements: [],
+          goals: [],
+          lastActivityAt: new Date(),
+        });
+      }
+
+      return { conversation, messages, state };
     } catch (error) {
       throw new PipelineError('load', error as Error, context);
     }
   }
 
   /**
-   * LLM Stage: Generate response using OpenAI
-   */
-  private async llmStage(messages: Message[], userMessage: string): Promise<string> {
-    try {
-      return await llmService.generateResponse(messages, userMessage);
-    } catch (error) {
-      throw new PipelineError('llm', error as Error);
-    }
-  }
-
-  /**
-   * Save Stage: Save user message and assistant response
+   * Save Stage: Save user message, assistant response, and updated state (MVP v2)
    */
   private async saveStage(
     conversationId: string,
     userMessage: string,
-    assistantResponse: string
+    assistantResponse: string,
+    state: ConversationState,
+    newMode: ConversationMode
   ): Promise<string> {
     try {
       const timestamp = new Date();
@@ -124,6 +192,20 @@ export class Pipeline {
         content: assistantResponse,
         timestamp: new Date(),
       });
+
+      // Save updated state if mode changed
+      if (newMode !== state.mode) {
+        await stateRepository.create({
+          id: uuidv4(),
+          conversationId,
+          mode: newMode,
+          contextElements: state.contextElements,
+          goals: state.goals,
+          lastActivityAt: new Date(),
+        });
+
+        logger.info({ conversationId, oldMode: state.mode, newMode }, 'Mode changed');
+      }
 
       return assistantMessage.id;
     } catch (error) {

@@ -11,8 +11,8 @@ const program = new Command();
 
 program
   .name('ai-assistant')
-  .description('AI Assistant CLI - MVP v1: Basic Message Processing')
-  .version('1.0.0-mvp-v1');
+  .description('AI Assistant CLI - MVP v2: State Management & Modes')
+  .version('1.0.0-mvp-v2');
 
 // Register commands
 registerChatCommand(program);

@@ -55,8 +55,8 @@ export interface DecayConfig {
   staleThresholdMinutes: number; // Minutes before context considered stale
 }
 
-export const DEFAULT_DECAY_CONFIG: DecayConfig = {
+export const DEFAULT_DECAY_CONFIG = {
   contextElementHalfLife: 24, // 24 hours
   goalExpiryDays: 7, // 7 days
   staleThresholdMinutes: 30, // 30 minutes
-};
+} as const satisfies DecayConfig;
