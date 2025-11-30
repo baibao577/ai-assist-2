@@ -13,6 +13,7 @@ import { consultHandler } from '@/core/modes/consult.handler.js';
 import { smalltalkHandler } from '@/core/modes/smalltalk.handler.js';
 import { metaHandler } from '@/core/modes/meta.handler.js';
 import { logger } from '@/core/logger.js';
+import { config } from '@/config/index.js';
 import {
   PipelineError,
   MessageRole,
@@ -51,6 +52,23 @@ export class Pipeline {
       // Stage 2: Apply decay to state
       const decayedState = decayStage.applyDecay(state);
 
+      logger.debug(
+        {
+          conversationId: conversation.id,
+          beforeDecay: {
+            contextElements: state.contextElements.length,
+            goals: state.goals.length,
+          },
+          afterDecay: {
+            contextElements: decayedState.contextElements.length,
+            goals: decayedState.goals.length,
+          },
+          elementsRemoved: state.contextElements.length - decayedState.contextElements.length,
+          goalsRemoved: state.goals.length - decayedState.goals.length,
+        },
+        'Decay stage: State decay applied'
+      );
+
       // Stage 3: Detect conversation mode
       const modeDetection = await modeDetector.detectMode(
         context.message,
@@ -72,6 +90,19 @@ export class Pipeline {
       if (!handler) {
         throw new Error(`No handler found for mode: ${modeDetection.mode}`);
       }
+
+      logger.info(
+        {
+          conversationId: conversation.id,
+          handlerMode: modeDetection.mode,
+          contextProvided: {
+            messages: messages.length,
+            contextElements: decayedState.contextElements.length,
+            activeGoals: decayedState.goals.filter((g) => g.status === 'active').length,
+          },
+        },
+        'Handler stage: Routing to mode handler'
+      );
 
       const handlerResult = await handler.handle({
         conversationId: conversation.id,
@@ -118,9 +149,7 @@ export class Pipeline {
         conversation = await conversationRepository.findById(context.conversationId);
       } else {
         // Find active conversation for user
-        const activeConversations = await conversationRepository.findActiveByUserId(
-          context.userId
-        );
+        const activeConversations = await conversationRepository.findActiveByUserId(context.userId);
         conversation = activeConversations[0] ?? null;
       }
 
@@ -138,8 +167,11 @@ export class Pipeline {
         await conversationRepository.updateActivity(conversation.id);
       }
 
-      // Load recent messages (last 10 for context)
-      const messages = await messageRepository.getRecentMessages(conversation.id, 10);
+      // Load recent messages for context
+      const messages = await messageRepository.getRecentMessages(
+        conversation.id,
+        config.context.messageLimit
+      );
 
       // Load or initialize conversation state
       let state = await stateRepository.getLatestByConversationId(conversation.id);
@@ -154,6 +186,26 @@ export class Pipeline {
           goals: [],
           lastActivityAt: new Date(),
         });
+
+        logger.info(
+          {
+            conversationId: conversation.id,
+            isNew: true,
+            initialMode: state.mode,
+          },
+          'Load stage: New conversation initialized'
+        );
+      } else {
+        logger.info(
+          {
+            conversationId: conversation.id,
+            messagesLoaded: messages.length,
+            currentMode: state.mode,
+            contextElements: state.contextElements.length,
+            activeGoals: state.goals.filter((g) => g.status === 'active').length,
+          },
+          'Load stage: Existing conversation loaded'
+        );
       }
 
       return { conversation, messages, state };

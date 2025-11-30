@@ -16,6 +16,7 @@ const envSchema = z.object({
   LLM_MAX_TOKENS: z.string().default('4096'),
   LLM_TEMPERATURE: z.string().default('0.7'),
   LLM_TIMEOUT: z.string().default('30000'),
+  CONTEXT_MESSAGE_LIMIT: z.string().default('10'),
 });
 
 // Parse and validate environment variables
@@ -35,6 +36,9 @@ export const config: AppConfig = {
   },
   logging: {
     level: env.LOG_LEVEL,
+  },
+  context: {
+    messageLimit: parseInt(env.CONTEXT_MESSAGE_LIMIT, 10),
   },
 };
 

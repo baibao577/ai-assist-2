@@ -85,6 +85,9 @@ export interface AppConfig {
   logging: {
     level: string;
   };
+  context: {
+    messageLimit: number;
+  };
 }
 
 // Error types
