@@ -15,7 +15,14 @@ export class ModeDetector {
     try {
       const prompt = this.buildDetectionPrompt(userMessage, recentMessages, currentMode);
 
-      logger.debug({ userMessage, currentMode }, 'Detecting conversation mode');
+      logger.debug(
+        {
+          userMessage: userMessage.substring(0, 100),
+          messageHistory: recentMessages.length,
+          currentMode,
+        },
+        'Mode detection: Starting classification'
+      );
 
       // Use LLM to classify the mode
       const response = await llmService.generateResponse([], prompt);
@@ -24,8 +31,14 @@ export class ModeDetector {
       const result = this.parseDetectionResponse(response);
 
       logger.info(
-        { mode: result.mode, confidence: result.confidence },
-        'Mode detected'
+        {
+          detectedMode: result.mode,
+          previousMode: currentMode,
+          confidence: result.confidence,
+          modeChanged: result.mode !== currentMode,
+          reasoning: result.reasoning,
+        },
+        'Mode detection: Classification complete'
       );
 
       return result;

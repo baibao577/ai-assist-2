@@ -96,8 +96,7 @@ export class DecayStage {
    * Check if context is stale (no activity for a while)
    */
   isStale(lastActivityAt: Date, currentTime: Date = new Date()): boolean {
-    const minutesSinceActivity =
-      (currentTime.getTime() - lastActivityAt.getTime()) / (1000 * 60);
+    const minutesSinceActivity = (currentTime.getTime() - lastActivityAt.getTime()) / (1000 * 60);
 
     return minutesSinceActivity > this.config.staleThresholdMinutes;
   }

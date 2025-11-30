@@ -56,10 +56,7 @@ export abstract class BaseModeHandler implements IModeHandler {
   /**
    * Generate LLM response with mode-specific system prompt
    */
-  protected async generateResponse(
-    systemPrompt: string,
-    context: HandlerContext
-  ): Promise<string> {
+  protected async generateResponse(systemPrompt: string, context: HandlerContext): Promise<string> {
     // Generate response (we'll need to update llmService to accept system messages)
     // For now, we'll prepend system prompt to the conversation
     const response = await llmService.generateResponse(

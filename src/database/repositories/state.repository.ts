@@ -40,9 +40,7 @@ export class StateRepository {
     }
   }
 
-  async getLatestByConversationId(
-    conversationId: string
-  ): Promise<ConversationState | null> {
+  async getLatestByConversationId(conversationId: string): Promise<ConversationState | null> {
     try {
       const result = await this.db
         .select()
@@ -71,10 +69,7 @@ export class StateRepository {
     }
   }
 
-  async getStateHistory(
-    conversationId: string,
-    limit: number = 10
-  ): Promise<ConversationState[]> {
+  async getStateHistory(conversationId: string, limit: number = 10): Promise<ConversationState[]> {
     try {
       const results = await this.db
         .select()
