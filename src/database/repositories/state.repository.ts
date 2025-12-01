@@ -52,11 +52,20 @@ export class StateRepository {
       const row = result[0];
       if (!row) return null;
 
+      // Parse context elements and convert date strings back to Date objects
+      const contextElements = (JSON.parse(row.contextElements as string) as ContextElement[]).map(
+        (element) => ({
+          ...element,
+          createdAt: new Date(element.createdAt),
+          lastAccessedAt: new Date(element.lastAccessedAt),
+        })
+      );
+
       return {
         id: row.id,
         conversationId: row.conversationId,
         mode: row.mode as ConversationMode,
-        contextElements: JSON.parse(row.contextElements as string) as ContextElement[],
+        contextElements,
         goals: JSON.parse(row.goals as string) as ConversationGoal[],
         lastActivityAt: row.lastActivityAt,
         metadata: row.metadata
@@ -78,18 +87,29 @@ export class StateRepository {
         .orderBy(desc(conversationStates.createdAt))
         .limit(limit);
 
-      return results.map((row) => ({
-        id: row.id,
-        conversationId: row.conversationId,
-        mode: row.mode as ConversationMode,
-        contextElements: JSON.parse(row.contextElements as string) as ContextElement[],
-        goals: JSON.parse(row.goals as string) as ConversationGoal[],
-        lastActivityAt: row.lastActivityAt,
-        metadata: row.metadata
-          ? (JSON.parse(row.metadata as string) as Record<string, unknown>)
-          : undefined,
-        createdAt: row.createdAt,
-      }));
+      return results.map((row) => {
+        // Parse context elements and convert date strings back to Date objects
+        const contextElements = (JSON.parse(row.contextElements as string) as ContextElement[]).map(
+          (element) => ({
+            ...element,
+            createdAt: new Date(element.createdAt),
+            lastAccessedAt: new Date(element.lastAccessedAt),
+          })
+        );
+
+        return {
+          id: row.id,
+          conversationId: row.conversationId,
+          mode: row.mode as ConversationMode,
+          contextElements,
+          goals: JSON.parse(row.goals as string) as ConversationGoal[],
+          lastActivityAt: row.lastActivityAt,
+          metadata: row.metadata
+            ? (JSON.parse(row.metadata as string) as Record<string, unknown>)
+            : undefined,
+          createdAt: row.createdAt,
+        };
+      });
     } catch (error) {
       throw new DatabaseError('get state history', error as Error);
     }

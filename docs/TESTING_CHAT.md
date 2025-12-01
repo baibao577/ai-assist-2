@@ -55,3 +55,55 @@ SAFE → SMALLTALK/META: Normal tone, casual responses
 SAFE → CONSULT: Helpful advice, problem-solving approach
 CONCERN → Any Mode: Empathetic tone adjustment, caring responses
 CRISIS → Any Mode: Urgent tone, crisis resources (988, Crisis Text Line, 911)
+
+---
+
+## 1. Emotional Context (48h half-life)
+
+Test dialogue to trigger emotional (not crisis-level):
+User: "Hi there"
+→ Normal greeting
+
+User: "I've been feeling really down lately, just kind of sad"
+→ Should trigger: contextType: 'emotional', value: 'distressed'
+→ Safety level: 'concern' (not crisis)
+
+User: "What's the weather like?"
+→ AI should show awareness of emotional state while answering
+→ e.g., "I hope talking about something light like weather helps..."
+
+## 2. Topic Context (24h half-life - fastest decay)
+
+**Test dialogue for topic tracking:**
+User: "Hi"
+→ Normal greeting
+
+User: "I need help with my sleep schedule"
+→ Should trigger: contextType: 'topic', value: 'sleep'
+→ Intent classifier extracts topic entities
+
+User: "Actually, can you help me with my diet too?"
+→ Should add: contextType: 'topic', value: 'diet'
+
+User: "What time is it?"
+→ AI might reference sleep/diet topics: "Speaking of time and your sleep schedule..."
+
+## === Conversation Start ===
+
+User: Hi
+AI: [greeting]
+
+User: I've been really stressed and anxious about work lately
+→ Extracts: emotional context (concern level)
+→ Weight: 0.8, Half-life: 48h
+
+User: Specifically, I need help with time management
+→ Extracts: topic context ("time management")  
+→ Weight: 0.8, Half-life: 24h
+
+User: Actually, what is your name?
+→ AI should show awareness:
+"EMOTIONAL CONTEXT: emotional_state: distressed
+Background Context: topic: time management
+
+    [Then answers the meta question with empathy]"

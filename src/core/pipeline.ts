@@ -1,5 +1,5 @@
-// Pipeline for MVP v3
-// Stages: Load → Decay → Classification → Handle → Save
+// Pipeline for MVP v3+
+// Stages: Load → Decay → Classification → Global → Handle → Save
 
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -8,6 +8,7 @@ import {
   stateRepository,
 } from '@/database/repositories/index.js';
 import { decayStage } from '@/core/stages/decay.stage.js';
+import { globalStage } from '@/core/stages/global.stage.js';
 import { safetyClassifier, intentClassifier, arbiter } from '@/core/classifiers/index.js';
 import { consultHandler } from '@/core/modes/consult.handler.js';
 import { smalltalkHandler } from '@/core/modes/smalltalk.handler.js';
@@ -28,6 +29,8 @@ import {
   type IModeHandler,
   type ArbiterDecision,
   type ClassificationContext,
+  type SafetyResult,
+  type IntentResult,
 } from '@/types/index.js';
 
 export class Pipeline {
@@ -42,8 +45,8 @@ export class Pipeline {
   }
 
   /**
-   * Execute the full pipeline for a user message (MVP v3)
-   * Stages: Load → Decay → Classification → Handle → Save
+   * Execute the full pipeline for a user message (MVP v3+)
+   * Stages: Load → Decay → Classification → Global → Handle → Save
    */
   async execute(context: PipelineContext): Promise<PipelineResult> {
     const startTime = Date.now();
@@ -73,9 +76,30 @@ export class Pipeline {
       );
 
       // Stage 3: Classification (Sequential: Safety → Intent → Arbiter)
-      const decision = await this.classificationStage(context, messages, decayedState);
+      const { decision, safetyResult, intentResult } = await this.classificationStage(
+        context,
+        messages,
+        decayedState
+      );
 
-      // Stage 4: Handle message with appropriate mode handler
+      // Stage 4: Global - Extract context elements from classification
+      const { state: stateWithContext } = await globalStage.execute({
+        message: context.message,
+        state: decayedState,
+        safetyResult,
+        intentResult,
+      });
+
+      logger.info(
+        {
+          conversationId: conversation.id,
+          contextElements: stateWithContext.contextElements.length,
+          contextByType: this.countContextByType(stateWithContext.contextElements),
+        },
+        'Global stage: Context elements extracted'
+      );
+
+      // Stage 5: Handle message with appropriate mode handler
       const handler = this.modeHandlers.get(decision.finalMode);
       if (!handler) {
         throw new Error(`No handler found for mode: ${decision.finalMode}`);
@@ -109,7 +133,7 @@ export class Pipeline {
         message: context.message,
         messages: messages.map((m) => ({ role: m.role, content: m.content })),
         currentMode: decision.finalMode,
-        state: decayedState as any,
+        state: stateWithContext as any,
         classification: classificationContext,
       });
 
@@ -118,7 +142,7 @@ export class Pipeline {
         conversation.id,
         context.message,
         handlerResult.response,
-        decayedState,
+        stateWithContext,
         decision.finalMode
       );
 
@@ -136,13 +160,14 @@ export class Pipeline {
   }
 
   /**
-   * Classification Stage: Sequential Safety → Intent → Arbiter (MVP v3)
+   * Classification Stage: Sequential Safety → Intent → Arbiter (MVP v3+)
+   * Returns decision and classification results for Global stage
    */
   private async classificationStage(
     context: PipelineContext,
     messages: Message[],
     state: ConversationState
-  ): Promise<ArbiterDecision> {
+  ): Promise<{ decision: ArbiterDecision; safetyResult: SafetyResult; intentResult: IntentResult }> {
     try {
       const classificationStart = Date.now();
 
@@ -206,10 +231,22 @@ export class Pipeline {
         'Classification: Arbiter decision complete'
       );
 
-      return decision;
+      return { decision, safetyResult, intentResult };
     } catch (error) {
       throw new PipelineError('classification', error as Error, context);
     }
+  }
+
+  /**
+   * Helper to count context elements by type
+   */
+  private countContextByType(elements: Array<{ contextType?: string }>): Record<string, number> {
+    const counts: Record<string, number> = {};
+    for (const element of elements) {
+      const type = element.contextType || 'general';
+      counts[type] = (counts[type] || 0) + 1;
+    }
+    return counts;
   }
 
   /**
@@ -344,19 +381,28 @@ export class Pipeline {
         timestamp: new Date(),
       });
 
-      // Save updated state if mode changed
-      if (newMode !== state.mode) {
-        await stateRepository.create({
-          id: uuidv4(),
-          conversationId,
-          mode: newMode,
-          contextElements: state.contextElements,
-          goals: state.goals,
-          lastActivityAt: new Date(),
-        });
+      // Always save state snapshot to persist context elements
+      const modeChanged = newMode !== state.mode;
+      await stateRepository.create({
+        id: uuidv4(),
+        conversationId,
+        mode: newMode,
+        contextElements: state.contextElements,
+        goals: state.goals,
+        lastActivityAt: new Date(),
+      });
 
-        logger.info({ conversationId, oldMode: state.mode, newMode }, 'Mode changed');
-      }
+      logger.info(
+        {
+          conversationId,
+          modeChanged,
+          oldMode: state.mode,
+          newMode,
+          contextElements: state.contextElements.length,
+          contextByType: this.countContextByType(state.contextElements),
+        },
+        'Save stage: State snapshot saved'
+      );
 
       return assistantMessage.id;
     } catch (error) {

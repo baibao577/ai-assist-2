@@ -1,12 +1,14 @@
 // LLM Service - OpenAI integration
 import OpenAI from 'openai';
 import { config } from '@/config/index.js';
+import { logger } from '@/core/logger.js';
 import type { Message } from '@/types/index.js';
 
 export interface LLMOptions {
   maxTokens?: number;
   temperature?: number;
   model?: string;
+  systemPrompt?: string; // Custom system prompt (overrides default)
 }
 
 export class LLMService {
@@ -25,12 +27,16 @@ export class LLMService {
     options?: LLMOptions
   ): Promise<string> {
     try {
+      // Use custom system prompt if provided, otherwise use default
+      const systemPrompt =
+        options?.systemPrompt ||
+        'You are a helpful AI assistant. Provide clear, accurate, and helpful responses.';
+
       // Convert our message format to OpenAI format
       const openAIMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
         {
           role: 'system',
-          content:
-            'You are a helpful AI assistant. Provide clear, accurate, and helpful responses.',
+          content: systemPrompt,
         },
         ...messages.map((msg) => ({
           role: msg.role as 'user' | 'assistant' | 'system',
@@ -41,6 +47,16 @@ export class LLMService {
           content: userMessage,
         },
       ];
+
+      logger.debug(
+        {
+          systemPromptLength: systemPrompt.length,
+          systemPromptPreview: systemPrompt.substring(0, 200),
+          messageCount: messages.length,
+          userMessageLength: userMessage.length,
+        },
+        'LLM Service: Calling OpenAI API'
+      );
 
       const completion = await this.client.chat.completions.create({
         model: options?.model || config.openai.model,
