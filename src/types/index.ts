@@ -112,6 +112,7 @@ export class DatabaseError extends Error {
   }
 }
 
-// Re-export mode and state types
+// Re-export mode, state, and classifier types
 export * from './modes.js';
 export * from './state.js';
+export * from './classifiers.js';

@@ -1,5 +1,7 @@
 // Mode types and enums for conversation modes
 
+import type { ClassificationContext } from './classifiers.js';
+
 export enum ConversationMode {
   CONSULT = 'consult', // Seeking advice, help with problems, health questions
   SMALLTALK = 'smalltalk', // Casual chat, greetings, general conversation
@@ -19,6 +21,7 @@ export interface HandlerContext {
   messages: Array<{ role: string; content: string }>;
   currentMode: ConversationMode;
   state: Record<string, unknown>; // Will be properly typed when we add ConversationState
+  classification?: ClassificationContext; // MVP v3: Safety and intent classification results
 }
 
 export interface HandlerResult {

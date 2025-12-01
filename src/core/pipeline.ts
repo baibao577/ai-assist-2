@@ -1,5 +1,5 @@
-// Pipeline for MVP v2
-// Stages: Load → Decay → Mode Detection → Handle → Save
+// Pipeline for MVP v3
+// Stages: Load → Decay → Classification → Handle → Save
 
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -7,8 +7,8 @@ import {
   messageRepository,
   stateRepository,
 } from '@/database/repositories/index.js';
-import { modeDetector } from '@/core/mode-detector.js';
 import { decayStage } from '@/core/stages/decay.stage.js';
+import { safetyClassifier, intentClassifier, arbiter } from '@/core/classifiers/index.js';
 import { consultHandler } from '@/core/modes/consult.handler.js';
 import { smalltalkHandler } from '@/core/modes/smalltalk.handler.js';
 import { metaHandler } from '@/core/modes/meta.handler.js';
@@ -19,12 +19,15 @@ import {
   MessageRole,
   ConversationStatus,
   ConversationMode,
+  SafetyLevel,
   type PipelineContext,
   type PipelineResult,
   type Conversation,
   type Message,
   type ConversationState,
   type IModeHandler,
+  type ArbiterDecision,
+  type ClassificationContext,
 } from '@/types/index.js';
 
 export class Pipeline {
@@ -39,8 +42,8 @@ export class Pipeline {
   }
 
   /**
-   * Execute the full pipeline for a user message (MVP v2)
-   * Stages: Load → Decay → Mode Detection → Handle → Save
+   * Execute the full pipeline for a user message (MVP v3)
+   * Stages: Load → Decay → Classification → Handle → Save
    */
   async execute(context: PipelineContext): Promise<PipelineResult> {
     const startTime = Date.now();
@@ -69,32 +72,21 @@ export class Pipeline {
         'Decay stage: State decay applied'
       );
 
-      // Stage 3: Detect conversation mode
-      const modeDetection = await modeDetector.detectMode(
-        context.message,
-        messages,
-        decayedState.mode
-      );
-
-      logger.info(
-        {
-          conversationId: conversation.id,
-          detectedMode: modeDetection.mode,
-          previousMode: decayedState.mode,
-        },
-        'Mode detection complete'
-      );
+      // Stage 3: Classification (Sequential: Safety → Intent → Arbiter)
+      const decision = await this.classificationStage(context, messages, decayedState);
 
       // Stage 4: Handle message with appropriate mode handler
-      const handler = this.modeHandlers.get(modeDetection.mode);
+      const handler = this.modeHandlers.get(decision.finalMode);
       if (!handler) {
-        throw new Error(`No handler found for mode: ${modeDetection.mode}`);
+        throw new Error(`No handler found for mode: ${decision.finalMode}`);
       }
 
       logger.info(
         {
           conversationId: conversation.id,
-          handlerMode: modeDetection.mode,
+          handlerMode: decision.finalMode,
+          safetyLevel: decision.safetyContext.level,
+          isCrisis: decision.safetyContext.isCrisis,
           contextProvided: {
             messages: messages.length,
             contextElements: decayedState.contextElements.length,
@@ -104,13 +96,21 @@ export class Pipeline {
         'Handler stage: Routing to mode handler'
       );
 
+      // Build classification context for handler
+      const classificationContext: ClassificationContext = {
+        decision,
+        safetySignals: [], // Will be populated from safety result
+        entities: [], // Will be populated from intent result
+      };
+
       const handlerResult = await handler.handle({
         conversationId: conversation.id,
         userId: context.userId,
         message: context.message,
         messages: messages.map((m) => ({ role: m.role, content: m.content })),
-        currentMode: modeDetection.mode,
+        currentMode: decision.finalMode,
         state: decayedState as any,
+        classification: classificationContext,
       });
 
       // Stage 5: Save messages and updated state
@@ -119,7 +119,7 @@ export class Pipeline {
         context.message,
         handlerResult.response,
         decayedState,
-        modeDetection.mode
+        decision.finalMode
       );
 
       const processingTime = Date.now() - startTime;
@@ -132,6 +132,83 @@ export class Pipeline {
       };
     } catch (error) {
       throw new PipelineError('pipeline', error as Error, context);
+    }
+  }
+
+  /**
+   * Classification Stage: Sequential Safety → Intent → Arbiter (MVP v3)
+   */
+  private async classificationStage(
+    context: PipelineContext,
+    messages: Message[],
+    state: ConversationState
+  ): Promise<ArbiterDecision> {
+    try {
+      const classificationStart = Date.now();
+
+      // Step 1: Safety Classification (always runs first)
+      const safetyResult = await safetyClassifier.classify({
+        message: context.message,
+        recentUserMessages: messages
+          .filter((m) => m.role === MessageRole.USER)
+          .slice(-3)
+          .map((m) => m.content),
+        currentSafetyLevel: SafetyLevel.SAFE, // TODO: Track safety level in state
+      });
+
+      logger.info(
+        {
+          safetyLevel: safetyResult.level,
+          confidence: safetyResult.confidence,
+          signals: safetyResult.signals,
+          isCrisis: safetyResult.level === SafetyLevel.CRISIS,
+        },
+        'Classification: Safety check complete'
+      );
+
+      // Step 2: Intent Classification (runs sequentially after safety)
+      const intentResult = await intentClassifier.classify({
+        message: context.message,
+        recentMessages: messages.slice(-5).map((m) => ({
+          role: m.role,
+          content: m.content,
+        })),
+        currentMode: state.mode,
+      });
+
+      logger.info(
+        {
+          intent: intentResult.intent,
+          suggestedMode: intentResult.suggestedMode,
+          confidence: intentResult.confidence,
+          entities: intentResult.entities.length,
+        },
+        'Classification: Intent detection complete'
+      );
+
+      // Step 3: Arbiter makes final decision
+      const decision = await arbiter.arbitrate({
+        safetyResult,
+        intentResult,
+        currentMode: state.mode,
+      });
+
+      const classificationDuration = Date.now() - classificationStart;
+
+      logger.info(
+        {
+          finalMode: decision.finalMode,
+          safetyLevel: decision.safetyContext.level,
+          isCrisis: decision.safetyContext.isCrisis,
+          overrideApplied: !!decision.overrideReason,
+          duration: classificationDuration,
+        },
+        'Classification: Arbiter decision complete'
+      );
+
+      return decision;
+    } catch (error) {
+      throw new PipelineError('classification', error as Error, context);
     }
   }
 

@@ -3,6 +3,12 @@ import OpenAI from 'openai';
 import { config } from '@/config/index.js';
 import type { Message } from '@/types/index.js';
 
+export interface LLMOptions {
+  maxTokens?: number;
+  temperature?: number;
+  model?: string;
+}
+
 export class LLMService {
   private client: OpenAI;
 
@@ -13,7 +19,11 @@ export class LLMService {
     });
   }
 
-  async generateResponse(messages: Message[], userMessage: string): Promise<string> {
+  async generateResponse(
+    messages: Message[],
+    userMessage: string,
+    options?: LLMOptions
+  ): Promise<string> {
     try {
       // Convert our message format to OpenAI format
       const openAIMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
@@ -33,10 +43,10 @@ export class LLMService {
       ];
 
       const completion = await this.client.chat.completions.create({
-        model: config.openai.model,
+        model: options?.model || config.openai.model,
         messages: openAIMessages,
-        max_tokens: config.openai.maxTokens,
-        temperature: config.openai.temperature,
+        max_tokens: options?.maxTokens || config.openai.maxTokens,
+        temperature: options?.temperature ?? config.openai.temperature,
       });
 
       const response = completion.choices[0]?.message?.content ?? '';
