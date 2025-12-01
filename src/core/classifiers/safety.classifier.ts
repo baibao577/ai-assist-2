@@ -9,43 +9,6 @@ import {
   type CrisisResource,
 } from '@/types/classifiers.js';
 
-// Crisis keywords for immediate detection
-const CRISIS_PATTERNS = {
-  suicide: [
-    'kill myself',
-    'end it all',
-    'not worth living',
-    'better off dead',
-    'want to die',
-    'suicide',
-    'suicidal',
-  ],
-  selfHarm: [
-    'hurt myself',
-    'harm myself',
-    'cut myself',
-    'cutting myself',
-    'self harm',
-    'self-harm',
-  ],
-  violence: [
-    'hurt someone',
-    'kill someone',
-    'attack someone',
-    'harm others',
-    'violent thoughts',
-  ],
-  medical: [
-    'chest pain',
-    "can't breathe",
-    'cannot breathe',
-    'bleeding heavily',
-    'overdose',
-    'overdosed',
-    'poisoned',
-  ],
-};
-
 // Crisis resources
 const CRISIS_RESOURCES: CrisisResource[] = [
   {
@@ -80,32 +43,19 @@ export class SafetyClassifier extends BaseClassifier<SafetyInput, SafetyResult> 
   readonly name = 'safety';
 
   async classify(input: SafetyInput): Promise<SafetyResult> {
-    // First check crisis keywords for immediate response
-    const crisisSignals = this.checkCrisisKeywords(input.message);
+    // Log input message for debugging
+    logger.debug(
+      {
+        classifier: this.name,
+        message: input.message,
+        recentMessages: input.recentUserMessages,
+        currentSafetyLevel: input.currentSafetyLevel,
+      },
+      'Safety classifier: Analyzing message'
+    );
 
-    if (crisisSignals.length > 0) {
-      logger.warn(
-        {
-          classifier: this.name,
-          signals: crisisSignals,
-          message: input.message.substring(0, 100),
-        },
-        'Safety: Crisis keywords detected'
-      );
-
-      return {
-        classifierName: 'safety',
-        level: SafetyLevel.CRISIS,
-        confidence: 1.0,
-        signals: crisisSignals,
-        suggestedTone: 'urgent',
-        requiresHumanEscalation: true,
-        crisisResources: CRISIS_RESOURCES,
-        timestamp: new Date(),
-      };
-    }
-
-    // Use LLM for nuanced classification
+    // Always use LLM for context-aware classification
+    // Keywords alone are too brittle (e.g., "killing it at the gym" vs "want to kill myself")
     return this.callLLM(input, {
       maxTokens: 200,
       temperature: 0.2, // Low temperature for consistency
@@ -162,7 +112,7 @@ Output ONLY valid JSON in this exact format:
   protected parseResponse(response: string): SafetyResult {
     const parsed = this.parseJSON<SafetyLLMResponse>(response);
 
-    return {
+    const result: SafetyResult = {
       classifierName: 'safety',
       level: this.mapLevel(parsed.level),
       confidence: parsed.confidence,
@@ -172,6 +122,20 @@ Output ONLY valid JSON in this exact format:
       crisisResources: parsed.level === 'crisis' ? CRISIS_RESOURCES : undefined,
       timestamp: new Date(),
     };
+
+    // Log classification result
+    logger.info(
+      {
+        classifier: this.name,
+        level: result.level,
+        confidence: result.confidence,
+        signals: result.signals,
+        isCrisis: result.level === SafetyLevel.CRISIS,
+      },
+      'Safety classifier: Result'
+    );
+
+    return result;
   }
 
   protected getFallback(): SafetyResult {
@@ -190,24 +154,6 @@ Output ONLY valid JSON in this exact format:
       requiresHumanEscalation: false,
       timestamp: new Date(),
     };
-  }
-
-  /**
-   * Check for crisis keywords in message
-   */
-  private checkCrisisKeywords(message: string): string[] {
-    const normalized = message.toLowerCase();
-    const signals: string[] = [];
-
-    for (const [category, patterns] of Object.entries(CRISIS_PATTERNS)) {
-      for (const pattern of patterns) {
-        if (normalized.includes(pattern)) {
-          signals.push(`${category}:${pattern}`);
-        }
-      }
-    }
-
-    return signals;
   }
 
   /**

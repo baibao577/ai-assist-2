@@ -12,6 +12,7 @@ const envSchema = z.object({
   DATABASE_PATH: z.string().default('./data/assistant.db'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
+  LOG_FILE_PATH: z.string().default('./logs/app.log'),
   LLM_MODEL: z.string().default('gpt-4o'),
   LLM_MAX_TOKENS: z.string().default('4096'),
   LLM_TEMPERATURE: z.string().default('0.7'),
@@ -36,6 +37,7 @@ export const config: AppConfig = {
   },
   logging: {
     level: env.LOG_LEVEL,
+    filePath: env.LOG_FILE_PATH,
   },
   context: {
     messageLimit: parseInt(env.CONTEXT_MESSAGE_LIMIT, 10),

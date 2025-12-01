@@ -219,10 +219,27 @@ export class Pipeline {
     context: PipelineContext
   ): Promise<{ conversation: Conversation; messages: Message[]; state: ConversationState }> {
     try {
-      let conversation: Conversation | null;
+      let conversation: Conversation | null = null;
 
-      // Try to find existing conversation
-      if (context.conversationId) {
+      // Debug log to verify flag is received
+      logger.debug(
+        {
+          forceNewConversation: context.forceNewConversation,
+          conversationId: context.conversationId,
+          userId: context.userId,
+        },
+        'Load stage: Received context'
+      );
+
+      // If forceNewConversation is true, skip finding existing conversations
+      if (context.forceNewConversation) {
+        logger.info(
+          { userId: context.userId },
+          'Load stage: Force creating new conversation (ignoring active conversations)'
+        );
+        // conversation stays null, will create new below
+      } else if (context.conversationId) {
+        // Try to find specific conversation by ID
         conversation = await conversationRepository.findById(context.conversationId);
       } else {
         // Find active conversation for user
@@ -230,7 +247,7 @@ export class Pipeline {
         conversation = activeConversations[0] ?? null;
       }
 
-      // Create new conversation if none exists
+      // Create new conversation if none exists or force new
       if (!conversation) {
         conversation = await conversationRepository.create({
           id: uuidv4(),
@@ -239,6 +256,11 @@ export class Pipeline {
           lastActivityAt: new Date(),
           status: ConversationStatus.ACTIVE,
         });
+
+        logger.info(
+          { conversationId: conversation.id, userId: context.userId },
+          'Load stage: Created new conversation'
+        );
       } else {
         // Update last activity
         await conversationRepository.updateActivity(conversation.id);

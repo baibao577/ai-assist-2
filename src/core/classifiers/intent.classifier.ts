@@ -27,6 +27,17 @@ export class IntentClassifier extends BaseClassifier<IntentInput, IntentResult> 
   readonly name = 'intent';
 
   async classify(input: IntentInput): Promise<IntentResult> {
+    // Log input message for debugging
+    logger.debug(
+      {
+        classifier: this.name,
+        message: input.message,
+        recentMessages: input.recentMessages.slice(-3), // Last 3 for brevity
+        currentMode: input.currentMode,
+      },
+      'Intent classifier: Analyzing message'
+    );
+
     // Use LLM for intent classification
     return this.callLLM(input, {
       maxTokens: 400,
@@ -105,7 +116,7 @@ Extract any relevant entities:
   protected parseResponse(response: string): IntentResult {
     const parsed = this.parseJSON<IntentLLMResponse>(response);
 
-    return {
+    const result: IntentResult = {
       classifierName: 'intent',
       intent: this.mapIntent(parsed.intent),
       suggestedMode: this.mapMode(parsed.suggestedMode),
@@ -114,6 +125,21 @@ Extract any relevant entities:
       reasoning: parsed.reasoning || 'No reasoning provided',
       timestamp: new Date(),
     };
+
+    // Log classification result
+    logger.info(
+      {
+        classifier: this.name,
+        intent: result.intent,
+        suggestedMode: result.suggestedMode,
+        confidence: result.confidence,
+        entities: result.entities,
+        reasoning: result.reasoning,
+      },
+      'Intent classifier: Result'
+    );
+
+    return result;
   }
 
   protected getFallback(): IntentResult {

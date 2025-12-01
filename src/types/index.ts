@@ -43,6 +43,7 @@ export interface PipelineContext {
   userId: string;
   message: string;
   timestamp: Date;
+  forceNewConversation?: boolean; // If true, ignore existing active conversations and create new
 }
 
 export interface PipelineResult {
@@ -84,6 +85,7 @@ export interface AppConfig {
   };
   logging: {
     level: string;
+    filePath: string;
   };
   context: {
     messageLimit: number;

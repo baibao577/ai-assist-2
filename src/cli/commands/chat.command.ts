@@ -9,7 +9,8 @@ import type { PipelineContext } from '@/types/index.js';
 
 interface ChatOptions {
   user?: string;
-  conversation?: string;
+  conversationId?: string;
+  new?: boolean;
   debug?: boolean;
 }
 
@@ -18,7 +19,12 @@ export function registerChatCommand(program: Command): void {
     .command('chat')
     .description('Start interactive chat session')
     .option('-u, --user <id>', 'User ID', 'cli-user')
-    .option('-c, --conversation <id>', 'Continue existing conversation')
+    .option(
+      '-n, --new',
+      'Force create new conversation (ignore existing active conversations)',
+      false
+    )
+    .option('-i, --conversation-id <id>', 'Continue specific conversation by ID')
     .option('-d, --debug', 'Show debug information', false)
     .action(async (options: ChatOptions) => {
       await executeChat(options);
@@ -26,11 +32,31 @@ export function registerChatCommand(program: Command): void {
 }
 
 async function executeChat(options: ChatOptions): Promise<void> {
-  console.info(chalk.blue('\n🤖 AI Assistant Ready (MVP v2)\n'));
+  // Debug: Log received options
+  logger.info(
+    {
+      optionsReceived: {
+        user: options.user,
+        new: options.new,
+        conversationId: options.conversationId,
+        debug: options.debug,
+      },
+    },
+    'Chat command: Starting with options'
+  );
+
+  console.info(chalk.blue('\n🤖 AI Assistant Ready (MVP v3)\n'));
   console.info(chalk.gray('Type "exit" or "quit" to end the conversation\n'));
 
   const userId = options.user ?? 'cli-user';
-  let conversationId = options.conversation; // Let pipeline find/create conversation
+  // Force new conversation if --new flag is set, otherwise use provided ID or let pipeline find/create
+  let conversationId = options.new ? undefined : options.conversationId;
+
+  if (options.new) {
+    console.info(chalk.yellow('Creating new conversation...\n'));
+  } else if (options.conversationId) {
+    console.info(chalk.yellow(`Continuing conversation: ${options.conversationId}\n`));
+  }
 
   // Main conversation loop
   while (true) {
@@ -58,12 +84,24 @@ async function executeChat(options: ChatOptions): Promise<void> {
       const spinner = ora('Thinking...').start();
 
       // Process message through pipeline
+      const forceNew = options.new && !conversationId;
       const context: PipelineContext = {
         conversationId,
         userId,
         message: message.trim(),
         timestamp: new Date(),
+        forceNewConversation: forceNew,
       };
+
+      // Debug log to verify flag
+      logger.debug(
+        {
+          optionsNew: options.new,
+          conversationId,
+          forceNewConversation: forceNew,
+        },
+        'Chat command: Building pipeline context'
+      );
 
       const result = await pipeline.execute(context);
 
