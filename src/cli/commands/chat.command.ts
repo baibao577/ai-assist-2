@@ -6,10 +6,12 @@ import ora from 'ora';
 import { pipeline } from '@/core/pipeline.js';
 import { logger } from '@/core/logger.js';
 import { registerHealthDomain } from '@/domains/health/index.js';
+import { registerFinanceDomain } from '@/domains/finance/index.js';
 import type { PipelineContext } from '@/types/index.js';
 
 // Initialize domains on module load
 registerHealthDomain();
+registerFinanceDomain();
 
 interface ChatOptions {
   user?: string;
