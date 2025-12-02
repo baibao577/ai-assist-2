@@ -2,6 +2,7 @@
 import { logger } from '@/core/logger.js';
 import type { ConversationState } from '@/types/state.js';
 import { steeringRegistry } from '@/core/domains/registries/index.js';
+import { domainConfig } from '@/core/domains/config/DomainConfig.js';
 import type { SteeringHints } from '@/core/domains/types.js';
 
 /**
@@ -15,6 +16,13 @@ export class SteeringStage {
    * Process the conversation state to generate steering hints
    */
   async process(state: ConversationState): Promise<ConversationState> {
+    // Check if steering is globally enabled
+    const globalConfig = domainConfig.getGlobalConfig();
+    if (!globalConfig.enabled || !globalConfig.steeringEnabled) {
+      logger.debug('Steering stage: Steering disabled globally');
+      return state;
+    }
+
     try {
       // Get all registered strategies
       const allStrategies = steeringRegistry.getAllStrategies();

@@ -4,6 +4,7 @@ import type { ConversationState } from '@/types/state.js';
 import { domainRegistry, extractorRegistry } from '@/core/domains/registries/index.js';
 import { DomainRelevanceClassifier } from '@/core/classifiers/domain.classifier.js';
 import { StorageFactory } from '@/core/domains/storage/index.js';
+import { domainConfig } from '@/core/domains/config/DomainConfig.js';
 import type { ExtractedData } from '@/core/domains/types.js';
 
 /**
@@ -18,6 +19,12 @@ export class ExtractionStage {
    * Process the conversation state to extract domain data
    */
   async process(state: ConversationState): Promise<ConversationState> {
+    // Check if domain system is enabled
+    if (!domainConfig.isEnabled()) {
+      logger.debug('Extraction stage: Domain system disabled');
+      return state;
+    }
+
     // Get last user message
     const lastMessage = state.messages?.[state.messages.length - 1];
     if (!lastMessage || lastMessage.role !== 'user') {
@@ -42,13 +49,26 @@ export class ExtractionStage {
         'Extraction stage: Processing domains'
       );
 
+      // Filter domains based on configuration
+      const enabledDomains = relevantDomains.filter((d) =>
+        domainConfig.isDomainEnabled(d.id)
+      );
+
+      if (enabledDomains.length === 0) {
+        logger.debug('Extraction stage: No enabled domains found');
+        return state;
+      }
+
       // Extract data for each relevant domain in parallel
-      const extractionPromises = relevantDomains.map(async (domain) => {
+      const extractionPromises = enabledDomains.map(async (domain) => {
         const extractor = extractorRegistry.getExtractor(domain.id);
         if (!extractor) {
           logger.warn({ domainId: domain.id }, 'No extractor found for domain');
           return null;
         }
+
+        // Get extraction config for this domain
+        const extractionConfig = domainConfig.getExtractionConfig(domain.id);
 
         const context = {
           recentMessages: (state.messages || []).slice(-5).map((m) => ({
@@ -59,10 +79,20 @@ export class ExtractionStage {
         };
 
         const extraction = await extractor.extract(lastMessage.content, context);
-        if (extraction) {
+
+        // Check if extraction meets confidence threshold
+        if (extraction && extraction.confidence >= (extractionConfig.confidenceThreshold || 0.5)) {
           extraction.domainId = domain.id;
+          return extraction;
         }
-        return extraction;
+
+        logger.debug({
+          domainId: domain.id,
+          confidence: extraction?.confidence || 0,
+          threshold: extractionConfig.confidenceThreshold
+        }, 'Extraction below confidence threshold');
+
+        return null;
       });
 
       const extractions = (await Promise.all(extractionPromises)).filter(

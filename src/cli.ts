@@ -6,6 +6,7 @@
 import { Command } from 'commander';
 import { registerChatCommand } from '@/cli/commands/chat.command.js';
 import { registerDbCommand } from '@/cli/commands/db.command.js';
+import { registerDomainsCommand } from '@/cli/commands/domains.command.js';
 
 const program = new Command();
 
@@ -17,6 +18,7 @@ program
 // Register commands
 registerChatCommand(program);
 registerDbCommand(program);
+registerDomainsCommand(program);
 
 // Parse arguments
 program.parse(process.argv);
