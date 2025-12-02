@@ -125,7 +125,43 @@ export async function initializeDatabase(): Promise<void> {
     ON conversation_states(created_at DESC);
   `);
 
-  logger.info('Database schema initialized (MVP v2)');
+  // Create domain_data table for generic domain storage (MVP v3 - Domains Framework)
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS domain_data (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+      domain_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      conversation_id TEXT NOT NULL,
+      data TEXT NOT NULL,
+      confidence REAL DEFAULT 0.8,
+      extracted_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+    );
+  `);
+
+  // Create indexes for domain_data
+  sqlite.exec(`
+    CREATE INDEX IF NOT EXISTS idx_domain_data_domain
+    ON domain_data(domain_id);
+  `);
+
+  sqlite.exec(`
+    CREATE INDEX IF NOT EXISTS idx_domain_data_user
+    ON domain_data(user_id);
+  `);
+
+  sqlite.exec(`
+    CREATE INDEX IF NOT EXISTS idx_domain_data_conversation
+    ON domain_data(conversation_id);
+  `);
+
+  sqlite.exec(`
+    CREATE INDEX IF NOT EXISTS idx_domain_data_extracted
+    ON domain_data(extracted_at DESC);
+  `);
+
+  logger.info('Database schema initialized (MVP v3 - Domains Framework)');
 }
 
 export default getDatabase;
