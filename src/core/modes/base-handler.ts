@@ -89,8 +89,12 @@ export abstract class BaseModeHandler implements IModeHandler {
    * Provides raw memory data for LLM to interpret naturally
    */
   protected buildContextSection(context: HandlerContext): string {
-    // Cast state to access contextElements (state is typed as Record<string, unknown>)
-    const state = context.state as { contextElements?: ContextElement[] };
+    // Cast state to access contextElements and steering (state is typed as Record<string, unknown>)
+    const state = context.state as {
+      contextElements?: ContextElement[];
+      steeringHints?: any;
+      extractions?: any;
+    };
     const elements: ContextElement[] = state?.contextElements || [];
 
     logger.debug(
@@ -195,7 +199,12 @@ export abstract class BaseModeHandler implements IModeHandler {
       }));
     }
 
-    const contextSection = `CONVERSATION MEMORY (from previous interactions):
+    // Build the context sections
+    let contextSections = [];
+
+    // Add memory context if present
+    if (Object.keys(memoryDisplay).length > 0) {
+      contextSections.push(`CONVERSATION MEMORY (from previous interactions):
 ${JSON.stringify(memoryDisplay, null, 2)}
 
 Memory Guide:
@@ -205,9 +214,50 @@ Memory Guide:
   * 0.1-0.3: Fading memory, only mention if directly relevant
   * <0.1: Nearly forgotten
 - Age: When this was last mentioned or relevant
-- Importance: Critical memories (like crisis) remain important even when fading
+- Importance: Critical memories (like crisis) remain important even when fading`);
+    }
 
-Use your natural judgment to incorporate relevant memories into your response.`;
+    // Add steering hints if present
+    if (state?.steeringHints) {
+      const hints = state.steeringHints;
+      contextSections.push(`CONVERSATION GUIDANCE:
+Type: ${hints.type || 'general'}
+Priority: ${hints.priority || 0.5}
+${hints.suggestions && hints.suggestions.length > 0 ? `
+Suggested questions or topics to explore:
+${hints.suggestions.map((s: string, i: number) => `${i + 1}. ${s}`).join('\n')}` : ''}
+${hints.context ? `
+Additional context: ${JSON.stringify(hints.context, null, 2)}` : ''}
+
+Use these suggestions naturally in your response if appropriate. Don't force them if they don't fit the conversation flow.`);
+    }
+
+    // Add recent extractions summary if present
+    if (state?.extractions && Object.keys(state.extractions).length > 0) {
+      const extractionSummary: any = {};
+      for (const [domainId, extractions] of Object.entries(state.extractions as any)) {
+        if (Array.isArray(extractions) && extractions.length > 0) {
+          // Get the most recent extraction for each domain
+          const recent = extractions[extractions.length - 1];
+          if (recent.confidence > 0.5) {
+            extractionSummary[domainId] = {
+              data: recent.data,
+              confidence: recent.confidence,
+              timestamp: recent.timestamp
+            };
+          }
+        }
+      }
+
+      if (Object.keys(extractionSummary).length > 0) {
+        contextSections.push(`EXTRACTED INFORMATION:
+${JSON.stringify(extractionSummary, null, 2)}
+
+This information was automatically extracted from the conversation. Use it to provide more personalized and relevant responses.`);
+      }
+    }
+
+    const contextSection = contextSections.join('\n\n');
 
     logger.debug(
       {

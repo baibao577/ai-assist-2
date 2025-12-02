@@ -106,7 +106,11 @@ export abstract class BaseExtractor {
 
       // If confidence is 0, treat as no extraction
       if (extractedData.confidence === 0) {
-        logger.debug({ domainId: this.domainId }, 'Extraction confidence too low');
+        logger.debug({
+          domainId: this.domainId,
+          parsedData: parsed,
+          confidence: extractedData.confidence
+        }, 'Extraction confidence too low');
         return null;
       }
 

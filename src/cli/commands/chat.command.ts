@@ -5,7 +5,11 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { pipeline } from '@/core/pipeline.js';
 import { logger } from '@/core/logger.js';
+import { registerHealthDomain } from '@/domains/health/index.js';
 import type { PipelineContext } from '@/types/index.js';
+
+// Initialize domains on module load
+registerHealthDomain();
 
 interface ChatOptions {
   user?: string;
