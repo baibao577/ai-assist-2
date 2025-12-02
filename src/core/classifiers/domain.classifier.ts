@@ -95,9 +95,7 @@ export class DomainRelevanceClassifier {
     domains: DomainDefinition[],
     state: ConversationState
   ): string {
-    const domainList = domains
-      .map((d) => `- ${d.id}: ${d.description}`)
-      .join('\n');
+    const domainList = domains.map((d) => `- ${d.id}: ${d.description}`).join('\n');
 
     return `Given this user message: "${message}"
 

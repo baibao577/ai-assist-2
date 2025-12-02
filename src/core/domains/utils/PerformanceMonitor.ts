@@ -121,9 +121,8 @@ export class PerformanceMonitor {
     const failedMetrics = relevantMetrics.filter((m) => !m.success);
 
     const durations = successfulMetrics.map((m) => m.duration);
-    const avgDuration = durations.length > 0
-      ? durations.reduce((a, b) => a + b, 0) / durations.length
-      : 0;
+    const avgDuration =
+      durations.length > 0 ? durations.reduce((a, b) => a + b, 0) / durations.length : 0;
 
     return {
       totalOperations: relevantMetrics.length,
@@ -194,14 +193,15 @@ export class PerformanceMonitor {
     const failures = this.getRecentFailures(5);
 
     let report = '📊 Domain Performance Report\n';
-    report += '=' .repeat(60) + '\n\n';
+    report += '='.repeat(60) + '\n\n';
 
     // Overall stats
     report += '📈 Domain Statistics:\n';
     for (const [domainId, stat] of Object.entries(stats)) {
-      const successRate = stat.totalOperations > 0
-        ? ((stat.successfulOperations / stat.totalOperations) * 100).toFixed(1)
-        : '0.0';
+      const successRate =
+        stat.totalOperations > 0
+          ? ((stat.successfulOperations / stat.totalOperations) * 100).toFixed(1)
+          : '0.0';
 
       report += `\n${domainId}:\n`;
       report += `  Total Operations: ${stat.totalOperations}\n`;
@@ -229,7 +229,7 @@ export class PerformanceMonitor {
       }
     }
 
-    report += '\n' + '=' .repeat(60);
+    report += '\n' + '='.repeat(60);
     return report;
   }
 }

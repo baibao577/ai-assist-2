@@ -76,7 +76,9 @@ export class SymptomExplorationStrategy extends BaseSteeringStrategy {
 
         // For severe symptoms (7+), suggest medical attention
         if (symptom.severity >= 7) {
-          suggestions.push(`Have you considered seeing a healthcare provider about your ${symptom.name}?`);
+          suggestions.push(
+            `Have you considered seeing a healthcare provider about your ${symptom.name}?`
+          );
           suggestions.push(`Is there anything that helps relieve your ${symptom.name}?`);
         } else if (symptom.severity >= 5) {
           // For moderate symptoms, ask about management
@@ -103,12 +105,12 @@ export class SymptomExplorationStrategy extends BaseSteeringStrategy {
       if (!healthData.mood.triggers || healthData.mood.triggers.length === 0) {
         suggestions.push("Is there something specific that's troubling you?");
       }
-      suggestions.push('Have you been able to talk to someone about how you\'re feeling?');
+      suggestions.push("Have you been able to talk to someone about how you're feeling?");
       suggestions.push('What usually helps when you feel this way?');
 
       // For very low mood (1-2), suggest support
       if (healthData.mood.level <= 2) {
-        suggestions.push('Would you like to talk about what\'s on your mind?');
+        suggestions.push("Would you like to talk about what's on your mind?");
         suggestions.push('Have you considered reaching out to a mental health professional?');
       }
     }
@@ -119,7 +121,7 @@ export class SymptomExplorationStrategy extends BaseSteeringStrategy {
         suggestions.push('What seems to be affecting your sleep?');
       }
       suggestions.push('Have you noticed any patterns with your sleep difficulties?');
-      suggestions.push('What\'s your bedtime routine like?');
+      suggestions.push("What's your bedtime routine like?");
     }
 
     // General symptom management questions

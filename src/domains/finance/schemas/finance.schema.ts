@@ -108,7 +108,10 @@ export const financeExtractionSchema = z.object({
   income: z
     .object({
       amount: z.number().nullable().optional().describe('Income amount'),
-      frequency: z.enum(['hourly', 'weekly', 'biweekly', 'monthly', 'yearly']).nullable().optional(),
+      frequency: z
+        .enum(['hourly', 'weekly', 'biweekly', 'monthly', 'yearly'])
+        .nullable()
+        .optional(),
       sources: z.array(z.string()).nullable().optional().describe('Income sources'),
     })
     .nullable()
@@ -147,11 +150,15 @@ export function getFinancialHealthScore(data: FinanceData): 'healthy' | 'moderat
   if (data.income?.amount && data.debt?.length) {
     const totalDebt = data.debt.reduce((sum, d) => sum + d.amount, 0);
     const annualIncome =
-      data.income.frequency === 'yearly' ? data.income.amount :
-      data.income.frequency === 'monthly' ? data.income.amount * 12 :
-      data.income.frequency === 'biweekly' ? data.income.amount * 26 :
-      data.income.frequency === 'weekly' ? data.income.amount * 52 :
-      data.income.amount * 2080; // hourly * 40 * 52
+      data.income.frequency === 'yearly'
+        ? data.income.amount
+        : data.income.frequency === 'monthly'
+          ? data.income.amount * 12
+          : data.income.frequency === 'biweekly'
+            ? data.income.amount * 26
+            : data.income.frequency === 'weekly'
+              ? data.income.amount * 52
+              : data.income.amount * 2080; // hourly * 40 * 52
 
     const debtRatio = totalDebt / annualIncome;
     if (debtRatio < 0.3) score += 3;
@@ -162,7 +169,7 @@ export function getFinancialHealthScore(data: FinanceData): 'healthy' | 'moderat
 
   // Check for major concerns
   if (data.concerns?.length) {
-    const majorConcerns = data.concerns.filter(c => c.severity === 'major').length;
+    const majorConcerns = data.concerns.filter((c) => c.severity === 'major').length;
     if (majorConcerns === 0) score += 3;
     else if (majorConcerns === 1) score += 2;
     else score += 1;

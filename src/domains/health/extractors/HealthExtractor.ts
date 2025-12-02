@@ -15,9 +15,7 @@ export class HealthExtractor extends BaseExtractor {
    * Build the extraction prompt for health data
    */
   protected buildExtractionPrompt(message: string, context: ExtractionContext): string {
-    const recentContext = context.recentMessages
-      .map((m) => `${m.role}: ${m.content}`)
-      .join('\n');
+    const recentContext = context.recentMessages.map((m) => `${m.role}: ${m.content}`).join('\n');
 
     return `You are a health information extractor. Extract health-related information from the user's message into the EXACT JSON structure below.
 
@@ -87,8 +85,8 @@ Guidelines:
   protected validateAndTransform(data: HealthData): ExtractedData {
     // Count how many top-level fields have data
     const fieldsWithData = Object.entries(data).filter(
-      ([_, value]) => value !== null && value !== undefined &&
-      (Array.isArray(value) ? value.length > 0 : true)
+      ([_, value]) =>
+        value !== null && value !== undefined && (Array.isArray(value) ? value.length > 0 : true)
     ).length;
 
     // Calculate confidence based on data completeness and quality

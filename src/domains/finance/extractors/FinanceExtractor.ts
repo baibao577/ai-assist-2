@@ -15,9 +15,7 @@ export class FinanceExtractor extends BaseExtractor {
    * Build the extraction prompt for finance data
    */
   protected buildExtractionPrompt(message: string, context: ExtractionContext): string {
-    const recentContext = context.recentMessages
-      .map((m) => `${m.role}: ${m.content}`)
-      .join('\n');
+    const recentContext = context.recentMessages.map((m) => `${m.role}: ${m.content}`).join('\n');
 
     return `You are a financial information extractor. Extract finance-related information from the user's message into the EXACT JSON structure below.
 
@@ -106,9 +104,14 @@ Guidelines:
   protected validateAndTransform(data: FinanceData): ExtractedData {
     // Count how many top-level fields have data
     const fieldsWithData = Object.entries(data).filter(
-      ([_, value]) => value !== null && value !== undefined &&
-      (Array.isArray(value) ? value.length > 0 :
-       typeof value === 'object' ? Object.values(value).some(v => v !== null && v !== undefined) : true)
+      ([_, value]) =>
+        value !== null &&
+        value !== undefined &&
+        (Array.isArray(value)
+          ? value.length > 0
+          : typeof value === 'object'
+            ? Object.values(value).some((v) => v !== null && v !== undefined)
+            : true)
     ).length;
 
     // Calculate confidence based on data completeness and quality

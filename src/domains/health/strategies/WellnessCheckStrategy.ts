@@ -170,8 +170,7 @@ export class WellnessCheckStrategy extends BaseSteeringStrategy {
     const healthExtractions = state.extractions?.health || [];
     if (healthExtractions.length > 1) {
       const previous = healthExtractions[healthExtractions.length - 2];
-      const hoursSince =
-        (Date.now() - new Date(previous.timestamp).getTime()) / (1000 * 60 * 60);
+      const hoursSince = (Date.now() - new Date(previous.timestamp).getTime()) / (1000 * 60 * 60);
 
       if (hoursSince < 1) return 'earlier';
       if (hoursSince < 24) return 'earlier today';

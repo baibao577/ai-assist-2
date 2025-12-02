@@ -58,7 +58,10 @@ export abstract class BaseSteeringStrategy {
    * @param hoursThreshold - Hours that must pass
    * @returns True if threshold exceeded
    */
-  protected hasTimeElapsed(lastCheckTime: Date | string | undefined, hoursThreshold: number): boolean {
+  protected hasTimeElapsed(
+    lastCheckTime: Date | string | undefined,
+    hoursThreshold: number
+  ): boolean {
     if (!lastCheckTime) return true;
 
     const lastCheck = typeof lastCheckTime === 'string' ? new Date(lastCheckTime) : lastCheckTime;

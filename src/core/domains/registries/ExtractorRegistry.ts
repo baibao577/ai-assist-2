@@ -30,10 +30,7 @@ export class ExtractorRegistry {
    */
   register(extractor: BaseExtractor): void {
     if (this.extractors.has(extractor.domainId)) {
-      logger.warn(
-        { domainId: extractor.domainId },
-        'Replacing existing extractor for domain'
-      );
+      logger.warn({ domainId: extractor.domainId }, 'Replacing existing extractor for domain');
     }
 
     this.extractors.set(extractor.domainId, extractor);

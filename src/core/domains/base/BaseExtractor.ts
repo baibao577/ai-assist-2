@@ -50,7 +50,8 @@ export abstract class BaseExtractor {
         messages: [
           {
             role: 'system',
-            content: prompt + '\n\nReturn your response as valid JSON matching the expected schema.',
+            content:
+              prompt + '\n\nReturn your response as valid JSON matching the expected schema.',
           },
           {
             role: 'user',
@@ -106,11 +107,14 @@ export abstract class BaseExtractor {
 
       // If confidence is 0, treat as no extraction
       if (extractedData.confidence === 0) {
-        logger.debug({
-          domainId: this.domainId,
-          parsedData: parsed,
-          confidence: extractedData.confidence
-        }, 'Extraction confidence too low');
+        logger.debug(
+          {
+            domainId: this.domainId,
+            parsedData: parsed,
+            confidence: extractedData.confidence,
+          },
+          'Extraction confidence too low'
+        );
         return null;
       }
 

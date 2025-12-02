@@ -62,9 +62,7 @@ export abstract class BaseModeHandler implements IModeHandler {
     const contextSection = this.buildContextSection(context);
 
     // Inject context BEFORE mode-specific system prompt
-    const fullSystemPrompt = contextSection
-      ? `${contextSection}\n\n${systemPrompt}`
-      : systemPrompt;
+    const fullSystemPrompt = contextSection ? `${contextSection}\n\n${systemPrompt}` : systemPrompt;
 
     logger.debug(
       {
@@ -223,11 +221,19 @@ Memory Guide:
       contextSections.push(`CONVERSATION GUIDANCE:
 Type: ${hints.type || 'general'}
 Priority: ${hints.priority || 0.5}
-${hints.suggestions && hints.suggestions.length > 0 ? `
+${
+  hints.suggestions && hints.suggestions.length > 0
+    ? `
 Suggested questions or topics to explore:
-${hints.suggestions.map((s: string, i: number) => `${i + 1}. ${s}`).join('\n')}` : ''}
-${hints.context ? `
-Additional context: ${JSON.stringify(hints.context, null, 2)}` : ''}
+${hints.suggestions.map((s: string, i: number) => `${i + 1}. ${s}`).join('\n')}`
+    : ''
+}
+${
+  hints.context
+    ? `
+Additional context: ${JSON.stringify(hints.context, null, 2)}`
+    : ''
+}
 
 Use these suggestions naturally in your response if appropriate. Don't force them if they don't fit the conversation flow.`);
     }
@@ -243,7 +249,7 @@ Use these suggestions naturally in your response if appropriate. Don't force the
             extractionSummary[domainId] = {
               data: recent.data,
               confidence: recent.confidence,
-              timestamp: recent.timestamp
+              timestamp: recent.timestamp,
             };
           }
         }

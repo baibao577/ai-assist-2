@@ -1,5 +1,9 @@
 // Health Domain Registration
-import { domainRegistry, extractorRegistry, steeringRegistry } from '@/core/domains/registries/index.js';
+import {
+  domainRegistry,
+  extractorRegistry,
+  steeringRegistry,
+} from '@/core/domains/registries/index.js';
 import { HealthExtractor } from './extractors/HealthExtractor.js';
 import { WellnessCheckStrategy, SymptomExplorationStrategy } from './strategies/index.js';
 import { healthExtractionSchema } from './schemas/health.schema.js';
@@ -15,7 +19,8 @@ export function registerHealthDomain(): void {
     domainRegistry.register({
       id: 'health',
       name: 'Health & Wellness',
-      description: 'Track physical and mental health, symptoms, mood, sleep, exercise, and wellness',
+      description:
+        'Track physical and mental health, symptoms, mood, sleep, exercise, and wellness',
       priority: 1, // Highest priority domain
       enabled: true,
       capabilities: {
@@ -26,7 +31,17 @@ export function registerHealthDomain(): void {
       config: {
         extractionSchema: healthExtractionSchema,
         steeringStrategy: {
-          triggers: ['health', 'symptom', 'pain', 'sick', 'tired', 'sleep', 'mood', 'stressed', 'anxious'],
+          triggers: [
+            'health',
+            'symptom',
+            'pain',
+            'sick',
+            'tired',
+            'sleep',
+            'mood',
+            'stressed',
+            'anxious',
+          ],
           maxSuggestionsPerTurn: 2,
         },
         storageConfig: {

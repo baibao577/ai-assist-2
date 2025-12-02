@@ -122,7 +122,15 @@ export class GlobalStage {
       if (safetyResult.signals && safetyResult.signals.length > 0) {
         for (const signal of safetyResult.signals) {
           // Parse common emotional keywords from signals
-          const emotionalKeywords = ['stressed', 'anxious', 'worried', 'overwhelmed', 'sad', 'angry', 'frustrated'];
+          const emotionalKeywords = [
+            'stressed',
+            'anxious',
+            'worried',
+            'overwhelmed',
+            'sad',
+            'angry',
+            'frustrated',
+          ];
 
           for (const keyword of emotionalKeywords) {
             if (signal.toLowerCase().includes(keyword)) {
@@ -130,7 +138,7 @@ export class GlobalStage {
               const emotionKey = `emotion:${keyword}`;
 
               // Only add if not already added
-              if (!elements.find(e => e.key === emotionKey)) {
+              if (!elements.find((e) => e.key === emotionKey)) {
                 elements.push({
                   key: emotionKey,
                   value: keyword,

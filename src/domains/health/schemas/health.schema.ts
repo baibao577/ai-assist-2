@@ -120,10 +120,7 @@ export function hasHealthContent(data: HealthData): boolean {
  */
 export function getHealthSeverity(data: HealthData): 'normal' | 'moderate' | 'severe' {
   // Check symptom severity
-  const maxSymptomSeverity = Math.max(
-    0,
-    ...(data.symptoms?.map((s) => s.severity) || [])
-  );
+  const maxSymptomSeverity = Math.max(0, ...(data.symptoms?.map((s) => s.severity) || []));
 
   // Check mood level (low mood is concerning)
   const moodConcern = data.mood && data.mood.level <= 3;

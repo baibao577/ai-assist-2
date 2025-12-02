@@ -25,13 +25,14 @@ export class BudgetGuidanceStrategy extends BaseSteeringStrategy {
     const hasBudgetData = financeData.budget !== null && financeData.budget !== undefined;
 
     // Check for expense transactions
-    const hasExpenses = financeData.transactions?.some(t => t.type === 'expense');
+    const hasExpenses = financeData.transactions?.some((t) => t.type === 'expense');
 
     // Check for overspending concerns
     const hasSpendingConcerns = financeData.concerns?.some(
-      c => c.topic.toLowerCase().includes('spend') ||
-           c.topic.toLowerCase().includes('budget') ||
-           c.topic.toLowerCase().includes('expense')
+      (c) =>
+        c.topic.toLowerCase().includes('spend') ||
+        c.topic.toLowerCase().includes('budget') ||
+        c.topic.toLowerCase().includes('expense')
     );
 
     return hasBudgetData || hasExpenses || hasSpendingConcerns || false;
@@ -53,7 +54,7 @@ export class BudgetGuidanceStrategy extends BaseSteeringStrategy {
       suggestions: this.prioritizeSuggestions(suggestions).slice(0, 3),
       context: {
         hasBudget: !!financeData.budget,
-        recentExpenses: financeData.transactions?.filter(t => t.type === 'expense').length || 0,
+        recentExpenses: financeData.transactions?.filter((t) => t.type === 'expense').length || 0,
         categories: this.extractCategories(financeData),
       },
       priority: this.priority,
@@ -67,9 +68,9 @@ export class BudgetGuidanceStrategy extends BaseSteeringStrategy {
     const suggestions: string[] = [];
 
     // If they have expenses but no budget
-    if (financeData.transactions?.some(t => t.type === 'expense') && !financeData.budget) {
+    if (financeData.transactions?.some((t) => t.type === 'expense') && !financeData.budget) {
       suggestions.push('Would you like help creating a budget based on your expenses?');
-      suggestions.push('What's your target monthly spending limit?');
+      suggestions.push("What's your target monthly spending limit?");
     }
 
     // If they have a budget, help track it
@@ -77,10 +78,12 @@ export class BudgetGuidanceStrategy extends BaseSteeringStrategy {
       if (financeData.budget.categories && financeData.budget.categories.length > 0) {
         // Check which categories might be overspent
         const overspent = financeData.budget.categories.filter(
-          c => c.spent && c.spent > c.amount
+          (c) => c.spent && c.spent > c.amount
         );
         if (overspent.length > 0) {
-          suggestions.push(`I notice you're over budget in ${overspent[0].name}. Would you like suggestions for cutting back?`);
+          suggestions.push(
+            `I notice you're over budget in ${overspent[0].name}. Would you like suggestions for cutting back?`
+          );
         }
       } else {
         suggestions.push('Would you like to break down your budget into categories?');
@@ -91,19 +94,21 @@ export class BudgetGuidanceStrategy extends BaseSteeringStrategy {
 
     // Analyze expense patterns
     if (financeData.transactions && financeData.transactions.length > 0) {
-      const expenses = financeData.transactions.filter(t => t.type === 'expense');
+      const expenses = financeData.transactions.filter((t) => t.type === 'expense');
 
       // Check for categories
-      const uncategorized = expenses.filter(e => !e.category);
+      const uncategorized = expenses.filter((e) => !e.category);
       if (uncategorized.length > 0) {
         suggestions.push('Would you like help categorizing your expenses for better tracking?');
       }
 
       // Large expenses
       const avgAmount = expenses.reduce((sum, e) => sum + e.amount, 0) / expenses.length;
-      const largeExpenses = expenses.filter(e => e.amount > avgAmount * 2);
+      const largeExpenses = expenses.filter((e) => e.amount > avgAmount * 2);
       if (largeExpenses.length > 0) {
-        suggestions.push(`That ${largeExpenses[0].description} was a significant expense. Was it planned?`);
+        suggestions.push(
+          `That ${largeExpenses[0].description} was a significant expense. Was it planned?`
+        );
       }
     }
 
@@ -111,8 +116,12 @@ export class BudgetGuidanceStrategy extends BaseSteeringStrategy {
     if (financeData.concerns && financeData.concerns.length > 0) {
       for (const concern of financeData.concerns) {
         if (concern.severity === 'major') {
-          suggestions.push(`You mentioned concerns about ${concern.topic}. What's your biggest challenge with this?`);
-          suggestions.push('Would you like help creating a plan to address this financial concern?');
+          suggestions.push(
+            `You mentioned concerns about ${concern.topic}. What's your biggest challenge with this?`
+          );
+          suggestions.push(
+            'Would you like help creating a plan to address this financial concern?'
+          );
         }
       }
     }

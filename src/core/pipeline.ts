@@ -205,7 +205,11 @@ export class Pipeline {
     context: PipelineContext,
     messages: Message[],
     state: ConversationState
-  ): Promise<{ decision: ArbiterDecision; safetyResult: SafetyResult; intentResult: IntentResult }> {
+  ): Promise<{
+    decision: ArbiterDecision;
+    safetyResult: SafetyResult;
+    intentResult: IntentResult;
+  }> {
     try {
       const classificationStart = Date.now();
 

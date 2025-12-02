@@ -61,7 +61,7 @@ function listDomains(): void {
   const config = domainConfig.getGlobalConfig();
 
   for (const domain of allDomains) {
-    const domainConfig = config.domains.find(d => d.domainId === domain.id);
+    const domainConfig = config.domains.find((d) => d.domainId === domain.id);
     const isEnabled = domainConfig?.enabled ?? false;
 
     const status = isEnabled ? chalk.green('✓ Enabled') : chalk.red('✗ Disabled');
@@ -87,7 +87,9 @@ function listDomains(): void {
   console.log(chalk.gray('─'.repeat(60)));
   console.log(chalk.bold('Global Settings:'));
   console.log(`  System: ${config.enabled ? chalk.green('Enabled') : chalk.red('Disabled')}`);
-  console.log(`  Steering: ${config.steeringEnabled ? chalk.green('Enabled') : chalk.red('Disabled')}`);
+  console.log(
+    `  Steering: ${config.steeringEnabled ? chalk.green('Enabled') : chalk.red('Disabled')}`
+  );
   console.log();
 }
 

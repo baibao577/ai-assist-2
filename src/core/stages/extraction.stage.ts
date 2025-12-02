@@ -50,9 +50,7 @@ export class ExtractionStage {
       );
 
       // Filter domains based on configuration
-      const enabledDomains = relevantDomains.filter((d) =>
-        domainConfig.isDomainEnabled(d.id)
-      );
+      const enabledDomains = relevantDomains.filter((d) => domainConfig.isDomainEnabled(d.id));
 
       if (enabledDomains.length === 0) {
         logger.debug('Extraction stage: No enabled domains found');
@@ -86,11 +84,14 @@ export class ExtractionStage {
           return extraction;
         }
 
-        logger.debug({
-          domainId: domain.id,
-          confidence: extraction?.confidence || 0,
-          threshold: extractionConfig.confidenceThreshold
-        }, 'Extraction below confidence threshold');
+        logger.debug(
+          {
+            domainId: domain.id,
+            confidence: extraction?.confidence || 0,
+            threshold: extractionConfig.confidenceThreshold,
+          },
+          'Extraction below confidence threshold'
+        );
 
         return null;
       });
@@ -156,7 +157,10 @@ export class ExtractionStage {
   /**
    * Store extraction in domain-specific storage
    */
-  private async storeExtraction(extraction: ExtractedData, state: ConversationState): Promise<void> {
+  private async storeExtraction(
+    extraction: ExtractedData,
+    state: ConversationState
+  ): Promise<void> {
     try {
       const domain = domainRegistry.getDomain(extraction.domainId);
       if (domain?.config.storageConfig) {

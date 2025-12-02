@@ -62,10 +62,7 @@ export function formatCrisisResources(resources: CrisisResource[]): string {
 /**
  * Build crisis response message
  */
-export function buildCrisisResponse(
-  level: SafetyLevel,
-  resources?: CrisisResource[]
-): string {
+export function buildCrisisResponse(level: SafetyLevel, resources?: CrisisResource[]): string {
   const template = CRISIS_RESPONSES[level];
 
   if (!template.includeResources || !resources) {
@@ -87,14 +84,14 @@ export const TONE_GUIDELINES: Record<
   }
 > = {
   [SafetyLevel.SAFE]: {
-    instructions: 'Respond naturally and helpfully to the user\'s message.',
+    instructions: "Respond naturally and helpfully to the user's message.",
     avoid: [],
     emphasize: ['helpfulness', 'clarity'],
   },
 
   [SafetyLevel.CONCERN]: {
     instructions:
-      'Respond with extra empathy and gentleness. Acknowledge the user\'s feelings and offer support.',
+      "Respond with extra empathy and gentleness. Acknowledge the user's feelings and offer support.",
     avoid: ['dismissiveness', 'toxic positivity', 'minimizing feelings'],
     emphasize: ['empathy', 'validation', 'support', 'gentle guidance'],
   },

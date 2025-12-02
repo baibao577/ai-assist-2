@@ -4,9 +4,10 @@ import { logger } from '@/core/logger.js';
 import { llmService } from '@/core/llm.service.js';
 import type { IClassifier, ClassificationResult } from '@/types/classifiers.js';
 
-export abstract class BaseClassifier<TInput, TResult extends ClassificationResult>
-  implements IClassifier<TInput, TResult>
-{
+export abstract class BaseClassifier<
+  TInput,
+  TResult extends ClassificationResult,
+> implements IClassifier<TInput, TResult> {
   abstract readonly name: string;
 
   /**

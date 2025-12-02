@@ -1,5 +1,9 @@
 // Finance Domain Registration
-import { domainRegistry, extractorRegistry, steeringRegistry } from '@/core/domains/registries/index.js';
+import {
+  domainRegistry,
+  extractorRegistry,
+  steeringRegistry,
+} from '@/core/domains/registries/index.js';
 import { FinanceExtractor } from './extractors/FinanceExtractor.js';
 import { BudgetGuidanceStrategy, GoalPlanningStrategy } from './strategies/index.js';
 import { financeExtractionSchema } from './schemas/finance.schema.js';
@@ -26,7 +30,18 @@ export function registerFinanceDomain(): void {
       config: {
         extractionSchema: financeExtractionSchema,
         steeringStrategy: {
-          triggers: ['money', 'budget', 'expense', 'save', 'invest', 'debt', 'income', 'spend', 'cost', 'pay'],
+          triggers: [
+            'money',
+            'budget',
+            'expense',
+            'save',
+            'invest',
+            'debt',
+            'income',
+            'spend',
+            'cost',
+            'pay',
+          ],
           maxSuggestionsPerTurn: 3,
         },
         storageConfig: {
@@ -67,5 +82,9 @@ export function registerFinanceDomain(): void {
 // Export components for testing or direct use
 export { FinanceExtractor } from './extractors/FinanceExtractor.js';
 export { BudgetGuidanceStrategy, GoalPlanningStrategy } from './strategies/index.js';
-export { financeExtractionSchema, hasFinanceContent, getFinancialHealthScore } from './schemas/index.js';
+export {
+  financeExtractionSchema,
+  hasFinanceContent,
+  getFinancialHealthScore,
+} from './schemas/index.js';
 export type { FinanceData } from './schemas/index.js';

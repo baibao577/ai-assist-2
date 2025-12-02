@@ -47,8 +47,8 @@ export class DomainConfigManager {
 
   private constructor() {
     // Load config from environment or file
-    this.configPath = process.env.DOMAIN_CONFIG_PATH ||
-                     path.join(process.cwd(), '.domains.config.json');
+    this.configPath =
+      process.env.DOMAIN_CONFIG_PATH || path.join(process.cwd(), '.domains.config.json');
     this.config = this.loadConfig();
   }
 
@@ -153,16 +153,9 @@ export class DomainConfigManager {
    */
   saveConfig(): void {
     try {
-      fs.writeFileSync(
-        this.configPath,
-        JSON.stringify(this.config, null, 2),
-        'utf-8'
-      );
+      fs.writeFileSync(this.configPath, JSON.stringify(this.config, null, 2), 'utf-8');
 
-      logger.info(
-        { configPath: this.configPath },
-        'Domain configuration saved'
-      );
+      logger.info({ configPath: this.configPath }, 'Domain configuration saved');
     } catch (error) {
       logger.error(
         {
@@ -185,7 +178,7 @@ export class DomainConfigManager {
    * Get configuration for a specific domain
    */
   getDomainConfig(domainId: string): DomainConfigItem | null {
-    const domainConfig = this.config.domains.find(d => d.domainId === domainId);
+    const domainConfig = this.config.domains.find((d) => d.domainId === domainId);
     return domainConfig ? { ...domainConfig } : null;
   }
 
@@ -193,7 +186,7 @@ export class DomainConfigManager {
    * Update domain configuration
    */
   updateDomainConfig(domainId: string, updates: Partial<DomainConfigItem>): void {
-    const index = this.config.domains.findIndex(d => d.domainId === domainId);
+    const index = this.config.domains.findIndex((d) => d.domainId === domainId);
 
     if (index >= 0) {
       this.config.domains[index] = {

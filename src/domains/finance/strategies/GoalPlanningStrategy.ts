@@ -25,13 +25,16 @@ export class GoalPlanningStrategy extends BaseSteeringStrategy {
     const hasGoals = financeData.goals && financeData.goals.length > 0;
 
     // Check for investments
-    const hasInvestments = financeData.investments !== null && financeData.investments !== undefined;
+    const hasInvestments =
+      financeData.investments !== null && financeData.investments !== undefined;
 
     // Check for savings discussions in income
-    const discussingSavings = financeData.income && state.messages?.some(
-      m => m.content.toLowerCase().includes('save') ||
-           m.content.toLowerCase().includes('saving')
-    );
+    const discussingSavings =
+      financeData.income &&
+      state.messages?.some(
+        (m) =>
+          m.content.toLowerCase().includes('save') || m.content.toLowerCase().includes('saving')
+      );
 
     return hasGoals || hasInvestments || discussingSavings || false;
   }
@@ -72,9 +75,13 @@ export class GoalPlanningStrategy extends BaseSteeringStrategy {
         if (goal.currentAmount !== null && goal.currentAmount !== undefined) {
           const progress = (goal.currentAmount / goal.targetAmount) * 100;
           if (progress < 25) {
-            suggestions.push(`You're at ${progress.toFixed(0)}% of your ${goal.name} goal. What's your savings strategy?`);
+            suggestions.push(
+              `You're at ${progress.toFixed(0)}% of your ${goal.name} goal. What's your savings strategy?`
+            );
           } else if (progress > 75) {
-            suggestions.push(`Great progress on ${goal.name}! You're ${(100 - progress).toFixed(0)}% away from your target.`);
+            suggestions.push(
+              `Great progress on ${goal.name}! You're ${(100 - progress).toFixed(0)}% away from your target.`
+            );
           }
         } else {
           suggestions.push(`How much have you saved so far for your ${goal.name} goal?`);
@@ -82,14 +89,18 @@ export class GoalPlanningStrategy extends BaseSteeringStrategy {
 
         // Check deadlines
         if (goal.deadline) {
-          suggestions.push(`What's your monthly savings plan to reach your ${goal.name} goal by ${goal.deadline}?`);
+          suggestions.push(
+            `What's your monthly savings plan to reach your ${goal.name} goal by ${goal.deadline}?`
+          );
         } else {
           suggestions.push(`When would you like to achieve your ${goal.name} goal?`);
         }
 
         // Priority-based suggestions
         if (goal.priority === 'high') {
-          suggestions.push(`Since ${goal.name} is a high priority, should we create a dedicated savings plan?`);
+          suggestions.push(
+            `Since ${goal.name} is a high priority, should we create a dedicated savings plan?`
+          );
         }
       }
     } else {
@@ -101,13 +112,17 @@ export class GoalPlanningStrategy extends BaseSteeringStrategy {
     // Investment suggestions
     if (financeData.investments) {
       if (financeData.investments.riskTolerance) {
-        suggestions.push(`With your ${financeData.investments.riskTolerance} risk tolerance, are you comfortable with your current portfolio?`);
+        suggestions.push(
+          `With your ${financeData.investments.riskTolerance} risk tolerance, are you comfortable with your current portfolio?`
+        );
       }
 
       if (financeData.investments.portfolio && financeData.investments.portfolio.length > 0) {
         suggestions.push('How often do you review and rebalance your investment portfolio?');
       } else {
-        suggestions.push('Have you considered starting an investment portfolio for long-term goals?');
+        suggestions.push(
+          'Have you considered starting an investment portfolio for long-term goals?'
+        );
       }
     }
 
