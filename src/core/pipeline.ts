@@ -1,5 +1,5 @@
-// Pipeline for MVP v3+
-// Stages: Load → Decay → Classification → Global → Handle → Save
+// Pipeline for MVP v3+ with Domains Framework
+// Stages: Load → Decay → Classification → Global → Extraction → Steering → Handle → Save
 
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -9,6 +9,8 @@ import {
 } from '@/database/repositories/index.js';
 import { decayStage } from '@/core/stages/decay.stage.js';
 import { globalStage } from '@/core/stages/global.stage.js';
+import { extractionStage } from '@/core/stages/extraction.stage.js';
+import { steeringStage } from '@/core/stages/steering.stage.js';
 import { safetyClassifier, intentClassifier, arbiter } from '@/core/classifiers/index.js';
 import { consultHandler } from '@/core/modes/consult.handler.js';
 import { smalltalkHandler } from '@/core/modes/smalltalk.handler.js';
@@ -45,8 +47,8 @@ export class Pipeline {
   }
 
   /**
-   * Execute the full pipeline for a user message (MVP v3+)
-   * Stages: Load → Decay → Classification → Global → Handle → Save
+   * Execute the full pipeline for a user message (MVP v3+ with Domains)
+   * Stages: Load → Decay → Classification → Global → Extraction → Steering → Handle → Save
    */
   async execute(context: PipelineContext): Promise<PipelineResult> {
     const startTime = Date.now();
@@ -99,6 +101,42 @@ export class Pipeline {
         'Global stage: Context elements extracted'
       );
 
+      // Prepare state with messages and userId for domain stages
+      const stateForDomains = {
+        ...stateWithContext,
+        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        userId: context.userId,
+        conversationId: conversation.id,
+      };
+
+      // Stage 4.5: Domain Extraction (NEW - MVP v3 Domains Framework)
+      const stateWithExtractions = await extractionStage.process(stateForDomains);
+
+      if (stateWithExtractions.metadata?.activeDomains?.length) {
+        logger.info(
+          {
+            conversationId: conversation.id,
+            extractedDomains: stateWithExtractions.metadata.activeDomains,
+            extractionCount: Object.keys(stateWithExtractions.extractions || {}).length,
+          },
+          'Extraction stage: Domain data extracted'
+        );
+      }
+
+      // Stage 4.6: Conversation Steering (NEW - MVP v3 Domains Framework)
+      const stateWithSteering = await steeringStage.process(stateWithExtractions);
+
+      if (stateWithSteering.steeringHints?.suggestions.length) {
+        logger.info(
+          {
+            conversationId: conversation.id,
+            steeringStrategies: stateWithSteering.metadata?.steeringApplied || [],
+            suggestionCount: stateWithSteering.steeringHints.suggestions.length,
+          },
+          'Steering stage: Conversation guidance generated'
+        );
+      }
+
       // Stage 5: Handle message with appropriate mode handler
       const handler = this.modeHandlers.get(decision.finalMode);
       if (!handler) {
@@ -133,16 +171,16 @@ export class Pipeline {
         message: context.message,
         messages: messages.map((m) => ({ role: m.role, content: m.content })),
         currentMode: decision.finalMode,
-        state: stateWithContext as any,
+        state: stateWithSteering as any, // Use enhanced state with extractions and steering
         classification: classificationContext,
       });
 
-      // Stage 5: Save messages and updated state
+      // Stage 6: Save messages and updated state
       const messageId = await this.saveStage(
         conversation.id,
         context.message,
         handlerResult.response,
-        stateWithContext,
+        stateWithSteering, // Save enhanced state
         decision.finalMode
       );
 

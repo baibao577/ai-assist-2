@@ -1,6 +1,7 @@
 // Conversation state types for tracking state across messages
 
 import type { ConversationMode } from './modes.js';
+import type { ExtractedData, SteeringHints, DomainContext } from '@/core/domains/types.js';
 
 export type ContextType = 'crisis' | 'emotional' | 'topic' | 'preference' | 'general';
 
@@ -29,7 +30,27 @@ export interface ConversationState {
   goals: ConversationGoal[];
   lastActivityAt: Date;
   createdAt: Date;
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, unknown> & {
+    extractionTimestamp?: Date;
+    steeringApplied?: string[];
+    activeDomains?: string[];
+  };
+
+  // New fields for domain framework
+  extractions?: {
+    [domainId: string]: ExtractedData[];
+  };
+  steeringHints?: SteeringHints;
+  domainContext?: {
+    [domainId: string]: DomainContext;
+  };
+
+  // Additional context for pipeline
+  messages?: Array<{
+    role: string;
+    content: string;
+  }>;
+  userId?: string;
 }
 
 // DTOs for state operations
