@@ -6,6 +6,7 @@ export enum ConversationMode {
   CONSULT = 'consult', // Seeking advice, help with problems, health questions
   SMALLTALK = 'smalltalk', // Casual chat, greetings, general conversation
   META = 'meta', // Questions about the assistant, capabilities, how it works
+  TRACK_PROGRESS = 'track_progress', // MVP v4: Goal setting, progress tracking, analytics
 }
 
 export interface ModeDetectionResult {

@@ -82,6 +82,13 @@ META MODE (questions about the assistant):
 - about_system: What can you do? What are your features?
 - help: I need help using this system
 
+TRACK_PROGRESS MODE (goal setting and tracking):
+- set_goal: User wants to set a new goal ("I want to...", "My goal is...")
+- view_goals: User wants to see their goals ("Show my goals", "What are my goals")
+- log_progress: User wants to log progress ("I did...", "I completed...")
+- check_progress: User wants analytics ("How am I doing?", "My progress")
+- update_goal: User wants to modify a goal
+
 UNCLEAR:
 - unclear: Cannot determine clear intent
 
@@ -89,6 +96,7 @@ UNCLEAR:
 - CONSULT: For health advice, problems, questions
 - SMALLTALK: For greetings and casual conversation
 - META: For questions about the assistant itself
+- TRACK_PROGRESS: For goal setting, progress tracking, and analytics
 
 **Entity Extraction:**
 Extract any relevant entities:
@@ -100,7 +108,7 @@ Extract any relevant entities:
 **Output ONLY valid JSON in this exact format:**
 {
   "intent": "intent_type",
-  "suggestedMode": "CONSULT" | "SMALLTALK" | "META",
+  "suggestedMode": "CONSULT" | "SMALLTALK" | "META" | "TRACK_PROGRESS",
   "confidence": 0.0-1.0,
   "entities": [
     {
@@ -170,6 +178,12 @@ Extract any relevant entities:
       how_works: IntentType.HOW_WORKS,
       about_system: IntentType.ABOUT_SYSTEM,
       help: IntentType.HELP,
+      // Track Progress intents (MVP v4)
+      set_goal: IntentType.SET_GOAL,
+      view_goals: IntentType.VIEW_GOALS,
+      log_progress: IntentType.LOG_PROGRESS,
+      check_progress: IntentType.CHECK_PROGRESS,
+      update_goal: IntentType.UPDATE_GOAL,
       unclear: IntentType.UNCLEAR,
     };
 
@@ -190,6 +204,7 @@ Extract any relevant entities:
       CONSULT: ConversationMode.CONSULT,
       SMALLTALK: ConversationMode.SMALLTALK,
       META: ConversationMode.META,
+      TRACK_PROGRESS: ConversationMode.TRACK_PROGRESS, // MVP v4
     };
 
     const mapped = modeMap[mode];

@@ -7,11 +7,13 @@ import { pipeline } from '@/core/pipeline.js';
 import { logger } from '@/core/logger.js';
 import { registerHealthDomain } from '@/domains/health/index.js';
 import { registerFinanceDomain } from '@/domains/finance/index.js';
+import { registerGoalDomain } from '@/domains/goal/index.js';
 import type { PipelineContext } from '@/types/index.js';
 
 // Initialize domains on module load
 registerHealthDomain();
 registerFinanceDomain();
+registerGoalDomain();
 
 interface ChatOptions {
   user?: string;

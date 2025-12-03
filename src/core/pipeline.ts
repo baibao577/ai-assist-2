@@ -54,6 +54,7 @@ import { safetyClassifier, intentClassifier, arbiter } from '@/core/classifiers/
 import { consultHandler } from '@/core/modes/consult.handler.js';
 import { smalltalkHandler } from '@/core/modes/smalltalk.handler.js';
 import { metaHandler } from '@/core/modes/meta.handler.js';
+import { trackProgressHandler } from '@/core/modes/track-progress.handler.js'; // MVP v4
 import { logger } from '@/core/logger.js';
 import { pipelineDomainService } from './pipeline-domain.service.js';
 import { pipelineCoreService } from './pipeline-core.service.js';
@@ -88,6 +89,7 @@ export class Pipeline {
     this.modeHandlers.set(ConversationMode.CONSULT, consultHandler);
     this.modeHandlers.set(ConversationMode.SMALLTALK, smalltalkHandler);
     this.modeHandlers.set(ConversationMode.META, metaHandler);
+    this.modeHandlers.set(ConversationMode.TRACK_PROGRESS, trackProgressHandler); // MVP v4
   }
 
   // ═══════════════════════════════════════════════════════════════════════

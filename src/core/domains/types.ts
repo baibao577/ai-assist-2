@@ -29,7 +29,7 @@ export interface DomainCapabilities {
 export interface DomainConfig {
   extractionSchema: z.ZodSchema;
   steeringStrategy: SteeringConfig;
-  storageConfig: StorageConfig;
+  storageConfig?: StorageConfig; // Optional - some domains use custom repositories
 }
 
 /**

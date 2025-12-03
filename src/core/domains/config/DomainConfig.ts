@@ -144,6 +144,25 @@ export class DomainConfigManager {
             retentionDays: 730, // 2 years for financial data
           },
         },
+        {
+          domainId: 'goal',
+          enabled: true,
+          priority: 1.5,
+          extractionConfig: {
+            confidenceThreshold: 0.4,
+            maxTokens: 500,
+            temperature: 0.3,
+          },
+          steeringConfig: {
+            enabled: true,
+            maxSuggestions: 0, // No proactive suggestions during clarification
+            priorityThreshold: 0.5,
+          },
+          storageConfig: {
+            enabled: false, // Uses custom repositories
+            retentionDays: 365,
+          },
+        },
       ],
     };
   }

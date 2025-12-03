@@ -69,6 +69,13 @@ export enum IntentType {
   ABOUT_SYSTEM = 'about_system',
   HELP = 'help',
 
+  // Track Progress Mode Intents (MVP v4)
+  SET_GOAL = 'set_goal',
+  VIEW_GOALS = 'view_goals',
+  LOG_PROGRESS = 'log_progress',
+  CHECK_PROGRESS = 'check_progress',
+  UPDATE_GOAL = 'update_goal',
+
   // Unclear
   UNCLEAR = 'unclear',
 }

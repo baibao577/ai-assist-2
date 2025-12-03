@@ -161,7 +161,70 @@ export async function initializeDatabase(): Promise<void> {
     ON domain_data(extracted_at DESC);
   `);
 
-  logger.info('Database schema initialized (MVP v3 - Domains Framework)');
+  // Create goals table (MVP v4 - Track Progress)
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS goals (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+      user_id TEXT NOT NULL,
+      conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      category TEXT,
+      target_value REAL,
+      current_value REAL DEFAULT 0,
+      baseline_value REAL,
+      unit TEXT,
+      status TEXT DEFAULT 'active',
+      created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      target_date INTEGER,
+      completed_at INTEGER,
+      last_progress_at INTEGER,
+      metadata TEXT
+    );
+  `);
+
+  // Create progress_entries table (MVP v4 - Track Progress)
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS progress_entries (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+      goal_id TEXT NOT NULL,
+      value REAL NOT NULL,
+      notes TEXT,
+      logged_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      source TEXT DEFAULT 'manual',
+      conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+      metadata TEXT,
+      FOREIGN KEY (goal_id) REFERENCES goals(id) ON DELETE CASCADE
+    );
+  `);
+
+  // Create goal_milestones table (MVP v4 - Track Progress)
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS goal_milestones (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+      goal_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      target_value REAL NOT NULL,
+      sequence INTEGER NOT NULL,
+      achieved INTEGER DEFAULT 0,
+      achieved_at INTEGER,
+      metadata TEXT,
+      FOREIGN KEY (goal_id) REFERENCES goals(id) ON DELETE CASCADE
+    );
+  `);
+
+  // Create indexes for Track Progress tables
+  sqlite.exec(`
+    CREATE INDEX IF NOT EXISTS idx_goals_user ON goals(user_id);
+    CREATE INDEX IF NOT EXISTS idx_goals_status ON goals(status);
+    CREATE INDEX IF NOT EXISTS idx_goals_category ON goals(category);
+    CREATE INDEX IF NOT EXISTS idx_progress_goal ON progress_entries(goal_id);
+    CREATE INDEX IF NOT EXISTS idx_progress_logged ON progress_entries(logged_at);
+    CREATE INDEX IF NOT EXISTS idx_milestones_goal ON goal_milestones(goal_id);
+    CREATE INDEX IF NOT EXISTS idx_milestones_sequence ON goal_milestones(sequence);
+  `);
+
+  logger.info('Database schema initialized (MVP v4 - Track Progress)');
 }
 
 export default getDatabase;
