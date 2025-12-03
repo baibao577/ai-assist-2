@@ -11,7 +11,9 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().min(1, 'OPENAI_API_KEY is required'),
   DATABASE_PATH: z.string().default('./data/assistant.db'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
+  // Separate log levels for console and file
+  CONSOLE_LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug', 'silent']).default('error'),
+  FILE_LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('debug'),
   LOG_FILE_PATH: z.string().default('./logs/app.log'),
   LLM_MODEL: z.string().default('gpt-4o'),
   LLM_CLASSIFIER_MODEL: z.string().optional(), // Model for classifiers, falls back to LLM_MODEL
@@ -52,7 +54,8 @@ export const config: AppConfig = {
     path: env.DATABASE_PATH,
   },
   logging: {
-    level: env.LOG_LEVEL,
+    consoleLevel: env.CONSOLE_LOG_LEVEL,
+    fileLevel: env.FILE_LOG_LEVEL,
     filePath: env.LOG_FILE_PATH,
     llmVerbose: env.LLM_VERBOSE_LOGGING || false,
   },

@@ -86,7 +86,8 @@ export interface AppConfig {
     path: string;
   };
   logging: {
-    level: string;
+    consoleLevel: 'error' | 'warn' | 'info' | 'debug' | 'silent';
+    fileLevel: 'error' | 'warn' | 'info' | 'debug';
     filePath: string;
     llmVerbose?: boolean;
   };
