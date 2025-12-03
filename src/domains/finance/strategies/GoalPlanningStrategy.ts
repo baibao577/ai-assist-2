@@ -20,6 +20,7 @@ export class GoalPlanningStrategy extends BaseSteeringStrategy {
     if (!recentFinance) return false;
 
     const financeData = recentFinance.data as FinanceData;
+    if (!financeData) return false;
 
     // Check for goals
     const hasGoals = financeData.goals && financeData.goals.length > 0;
@@ -54,8 +55,8 @@ export class GoalPlanningStrategy extends BaseSteeringStrategy {
       type: 'goal_planning',
       suggestions: suggestions.slice(0, 3),
       context: {
-        goalsCount: financeData.goals?.length || 0,
-        hasInvestments: !!financeData.investments,
+        goalsCount: financeData?.goals?.length || 0,
+        hasInvestments: !!financeData?.investments,
         totalGoalAmount: this.calculateTotalGoalAmount(financeData),
       },
       priority: this.priority,
@@ -67,6 +68,11 @@ export class GoalPlanningStrategy extends BaseSteeringStrategy {
    */
   private buildGoalSuggestions(financeData: FinanceData): string[] {
     const suggestions: string[] = [];
+
+    // Handle undefined financeData
+    if (!financeData) {
+      return ['What financial goals are you working towards?'];
+    }
 
     // Analyze existing goals
     if (financeData.goals && financeData.goals.length > 0) {
@@ -143,7 +149,7 @@ export class GoalPlanningStrategy extends BaseSteeringStrategy {
    * Calculate total amount needed for all goals
    */
   private calculateTotalGoalAmount(data: FinanceData): number {
-    if (!data.goals) return 0;
+    if (!data || !data.goals) return 0;
 
     return data.goals.reduce((total, goal) => {
       const remaining = (goal.targetAmount || 0) - (goal.currentAmount || 0);
