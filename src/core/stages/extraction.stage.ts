@@ -34,7 +34,7 @@ export class ExtractionStage {
 
     try {
       // Classify which domains are relevant for this message
-      const relevantDomains = await this.classifier.classify(state);
+      const relevantDomains = await this.classifier.classifyDomains(state);
 
       if (relevantDomains.length === 0) {
         logger.debug('Extraction stage: No relevant domains found');

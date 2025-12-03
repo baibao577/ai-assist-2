@@ -1,117 +1,172 @@
 // Domain Relevance Classifier - Determines which domains are relevant to a message
-import OpenAI from 'openai';
-import { config } from '@/config/index.js';
+import { BaseClassifier } from './base.classifier.js';
 import { logger } from '@/core/logger.js';
 import { domainRegistry } from '@/core/domains/registries/index.js';
 import type { ConversationState } from '@/types/state.js';
 import type { DomainDefinition } from '@/core/domains/types.js';
+import type { ClassificationResult } from '@/types/classifiers.js';
+
+/**
+ * Result from domain classification
+ */
+interface DomainClassificationResult extends ClassificationResult {
+  domains: string[]; // Array of relevant domain IDs
+  confidence: number;
+}
+
+/**
+ * LLM response structure for domain classification
+ */
+interface DomainLLMResponse {
+  domains: string[];
+  reasoning?: string;
+}
 
 /**
  * Classifier that determines which domains are relevant for extraction
  * Uses LLM to analyze message content and conversation context
  */
-export class DomainRelevanceClassifier {
-  name = 'domain_relevance';
-  private openai: OpenAI;
-
-  constructor() {
-    this.openai = new OpenAI({
-      apiKey: config.openai.apiKey,
-      timeout: config.openai.timeout,
-    });
-  }
+export class DomainRelevanceClassifier extends BaseClassifier<
+  ConversationState,
+  DomainClassificationResult
+> {
+  readonly name = 'domain_relevance';
 
   /**
-   * Classify which domains are relevant to the current message
+   * Required classify method from BaseClassifier
    */
-  async classify(state: ConversationState): Promise<DomainDefinition[]> {
+  async classify(state: ConversationState): Promise<DomainClassificationResult> {
     const message = state.messages?.[state.messages.length - 1];
     if (!message || message.role !== 'user') {
-      return [];
+      return this.getFallback();
     }
 
     const domains = domainRegistry.getActiveDomains();
     if (domains.length === 0) {
-      return [];
+      return this.getFallback();
     }
 
-    try {
-      const prompt = this.buildPrompt(message.content, domains, state);
+    // Use the base class LLM call
+    return this.callLLM(state, {
+      maxTokens: 100,
+      temperature: 0.3,
+    });
+  }
 
-      const completion = await this.openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a domain classifier. Analyze the message and return only JSON.',
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.3,
-        max_tokens: 100,
-      });
+  /**
+   * Convenience method that returns DomainDefinition[] for backward compatibility
+   * Used by extraction stage
+   */
+  async classifyDomains(state: ConversationState): Promise<DomainDefinition[]> {
+    const result = await this.classify(state);
 
-      const content = completion.choices[0]?.message?.content;
-      if (!content) {
-        return [];
-      }
+    logger.debug(
+      {
+        messagePreview: state.messages?.[state.messages.length - 1]?.content.substring(0, 50),
+        availableDomains: domainRegistry.getActiveDomains().map((d) => d.id),
+        relevantDomains: result.domains,
+      },
+      'Domain classification complete'
+    );
 
-      const response = JSON.parse(content);
-      const relevantIds: string[] = response.domains || [];
-
-      logger.debug(
-        {
-          messagePreview: message.content.substring(0, 50),
-          availableDomains: domains.map((d) => d.id),
-          relevantDomains: relevantIds,
-        },
-        'Domain classification complete'
-      );
-
-      // Map IDs back to domain definitions
-      return relevantIds
-        .map((id) => domainRegistry.getDomain(id))
-        .filter(Boolean) as DomainDefinition[];
-    } catch (error) {
-      logger.error(
-        {
-          error: error instanceof Error ? error.message : String(error),
-        },
-        'Domain classification failed'
-      );
-      return [];
-    }
+    // Map IDs back to domain definitions
+    return result.domains
+      .map((id) => domainRegistry.getDomain(id))
+      .filter(Boolean) as DomainDefinition[];
   }
 
   /**
    * Build the classification prompt
    */
-  private buildPrompt(
-    message: string,
-    domains: DomainDefinition[],
-    state: ConversationState
-  ): string {
+  protected buildPrompt(state: ConversationState): string {
+    const message = state.messages?.[state.messages.length - 1];
+    if (!message) {
+      return 'No message to classify';
+    }
+
+    const domains = domainRegistry.getActiveDomains();
     const domainList = domains.map((d) => `- ${d.id}: ${d.description}`).join('\n');
 
-    return `Given this user message: "${message}"
+    return `You are a domain classifier. Analyze the message and determine which domains are relevant for information extraction.
 
-And these available domains:
+Given this user message: "${message.content}"
+
+Available domains:
 ${domainList}
 
-Which domains are relevant to extract information from? Consider:
+Consider:
 1. The message content and what information it contains
 2. Recent conversation context
 3. Currently active domains: ${state.metadata?.activeDomains?.join(', ') || 'none'}
 
-Return a JSON object with a "domains" array containing only the IDs of relevant domains.
+Return a JSON object with:
+- "domains": array of relevant domain IDs (only include domains with extractable information)
+- "reasoning": brief explanation (optional)
+
 Be selective - only include domains that have extractable information in this specific message.
 If no domains are relevant, return {"domains": []}.
 
-Example response: {"domains": ["health", "finance"]}`;
+Examples:
+- "I have a headache" → {"domains": ["health"]}
+- "I spent $50 on lunch" → {"domains": ["finance"]}
+- "I'm stressed about money and can't sleep" → {"domains": ["health", "finance"]}
+- "Hello there" → {"domains": []}`;
+  }
+
+  /**
+   * Parse the LLM response into a DomainClassificationResult
+   */
+  protected parseResponse(response: string): DomainClassificationResult {
+    try {
+      const parsed = this.parseJSON<DomainLLMResponse>(response);
+
+      // Validate that domains is an array
+      if (!Array.isArray(parsed.domains)) {
+        logger.warn('Domain classifier returned non-array domains, using empty array');
+        return {
+          domains: [],
+          confidence: 0.5,
+          classifierName: this.name,
+          timestamp: new Date(),
+        };
+      }
+
+      // Filter to only valid domain IDs
+      const validDomains = parsed.domains.filter(
+        (id) => typeof id === 'string' && domainRegistry.getDomain(id)
+      );
+
+      // Calculate confidence based on response
+      const confidence = validDomains.length > 0 ? 0.8 : 0.5;
+
+      return {
+        domains: validDomains,
+        confidence,
+        classifierName: this.name,
+        timestamp: new Date(),
+      };
+    } catch (error) {
+      logger.warn(
+        {
+          error: error instanceof Error ? error.message : String(error),
+          response: response.substring(0, 100),
+        },
+        'Failed to parse domain classification response'
+      );
+      return this.getFallback();
+    }
+  }
+
+  /**
+   * Return fallback result when classification fails
+   */
+  protected getFallback(): DomainClassificationResult {
+    return {
+      domains: [],
+      confidence: 0,
+      classifierName: this.name,
+      timestamp: new Date(),
+    };
   }
 }
 
