@@ -20,10 +20,10 @@ export class StateRepository {
         id: data.id,
         conversationId: data.conversationId,
         mode: data.mode,
-        contextElements: JSON.stringify(data.contextElements),
-        goals: JSON.stringify(data.goals),
+        contextElements: data.contextElements, // Let Drizzle handle JSON serialization
+        goals: data.goals, // Let Drizzle handle JSON serialization
         lastActivityAt: data.lastActivityAt,
-        metadata: data.metadata ? JSON.stringify(data.metadata) : null,
+        metadata: data.metadata || null, // Let Drizzle handle JSON serialization
         createdAt: new Date(),
       };
 
@@ -52,25 +52,21 @@ export class StateRepository {
       const row = result[0];
       if (!row) return null;
 
-      // Parse context elements and convert date strings back to Date objects
-      const contextElements = (JSON.parse(row.contextElements as string) as ContextElement[]).map(
-        (element) => ({
-          ...element,
-          createdAt: new Date(element.createdAt),
-          lastAccessedAt: new Date(element.lastAccessedAt),
-        })
-      );
+      // Convert date strings back to Date objects in context elements
+      const contextElements = (row.contextElements as any as ContextElement[]).map((element) => ({
+        ...element,
+        createdAt: new Date(element.createdAt),
+        lastAccessedAt: new Date(element.lastAccessedAt),
+      }));
 
       return {
         id: row.id,
         conversationId: row.conversationId,
         mode: row.mode as ConversationMode,
         contextElements,
-        goals: JSON.parse(row.goals as string) as ConversationGoal[],
+        goals: row.goals as any as ConversationGoal[], // Already parsed by Drizzle
         lastActivityAt: row.lastActivityAt,
-        metadata: row.metadata
-          ? (JSON.parse(row.metadata as string) as Record<string, unknown>)
-          : undefined,
+        metadata: row.metadata as Record<string, unknown> | undefined, // Already parsed by Drizzle
         createdAt: row.createdAt,
       };
     } catch (error) {
@@ -88,25 +84,21 @@ export class StateRepository {
         .limit(limit);
 
       return results.map((row) => {
-        // Parse context elements and convert date strings back to Date objects
-        const contextElements = (JSON.parse(row.contextElements as string) as ContextElement[]).map(
-          (element) => ({
-            ...element,
-            createdAt: new Date(element.createdAt),
-            lastAccessedAt: new Date(element.lastAccessedAt),
-          })
-        );
+        // Convert date strings back to Date objects in context elements
+        const contextElements = (row.contextElements as any as ContextElement[]).map((element) => ({
+          ...element,
+          createdAt: new Date(element.createdAt),
+          lastAccessedAt: new Date(element.lastAccessedAt),
+        }));
 
         return {
           id: row.id,
           conversationId: row.conversationId,
           mode: row.mode as ConversationMode,
           contextElements,
-          goals: JSON.parse(row.goals as string) as ConversationGoal[],
+          goals: row.goals as any as ConversationGoal[], // Already parsed by Drizzle
           lastActivityAt: row.lastActivityAt,
-          metadata: row.metadata
-            ? (JSON.parse(row.metadata as string) as Record<string, unknown>)
-            : undefined,
+          metadata: row.metadata as Record<string, unknown> | undefined, // Already parsed by Drizzle
           createdAt: row.createdAt,
         };
       });
