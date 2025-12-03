@@ -30,9 +30,9 @@ export class BudgetGuidanceStrategy extends BaseSteeringStrategy {
     // Check for overspending concerns
     const hasSpendingConcerns = financeData.concerns?.some(
       (c) =>
-        (c.topic || "").toLowerCase().includes('spend') ||
-        (c.topic || "").toLowerCase().includes('budget') ||
-        (c.topic || "").toLowerCase().includes('expense')
+        (c.topic || '').toLowerCase().includes('spend') ||
+        (c.topic || '').toLowerCase().includes('budget') ||
+        (c.topic || '').toLowerCase().includes('expense')
     );
 
     return hasBudgetData || hasExpenses || hasSpendingConcerns || false;

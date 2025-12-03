@@ -54,29 +54,35 @@ export const conversationStates = sqliteTable('conversation_states', {
 });
 
 // Domain data table (MVP v3)
-export const domainData = sqliteTable('domain_data', {
-  id: text('id').primaryKey().default(sql`lower(hex(randomblob(16)))`),
-  domainId: text('domain_id').notNull(),
-  userId: text('user_id').notNull(),
-  conversationId: text('conversation_id')
-    .notNull()
-    .references(() => conversations.id, { onDelete: 'cascade' }),
-  data: text('data', { mode: 'json' }).notNull(),
-  confidence: real('confidence').default(0.8),
-  extractedAt: integer('extracted_at', { mode: 'timestamp' })
-    .notNull()
-    .default(sql`CURRENT_TIMESTAMP`),
-  createdAt: integer('created_at', { mode: 'timestamp' })
-    .notNull()
-    .default(sql`CURRENT_TIMESTAMP`),
-}, (table) => {
-  return {
-    domainIdx: index('idx_domain_data_domain').on(table.domainId),
-    userIdx: index('idx_domain_data_user').on(table.userId),
-    conversationIdx: index('idx_domain_data_conversation').on(table.conversationId),
-    extractedIdx: index('idx_domain_data_extracted').on(table.extractedAt),
-  };
-});
+export const domainData = sqliteTable(
+  'domain_data',
+  {
+    id: text('id')
+      .primaryKey()
+      .default(sql`lower(hex(randomblob(16)))`),
+    domainId: text('domain_id').notNull(),
+    userId: text('user_id').notNull(),
+    conversationId: text('conversation_id')
+      .notNull()
+      .references(() => conversations.id, { onDelete: 'cascade' }),
+    data: text('data', { mode: 'json' }).notNull(),
+    confidence: real('confidence').default(0.8),
+    extractedAt: integer('extracted_at', { mode: 'timestamp' })
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+    createdAt: integer('created_at', { mode: 'timestamp' })
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => {
+    return {
+      domainIdx: index('idx_domain_data_domain').on(table.domainId),
+      userIdx: index('idx_domain_data_user').on(table.userId),
+      conversationIdx: index('idx_domain_data_conversation').on(table.conversationId),
+      extractedIdx: index('idx_domain_data_extracted').on(table.extractedAt),
+    };
+  }
+);
 
 // Type exports for insert and select
 export type Conversation = typeof conversations.$inferSelect;

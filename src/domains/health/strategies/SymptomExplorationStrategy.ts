@@ -27,7 +27,8 @@ export class SymptomExplorationStrategy extends BaseSteeringStrategy {
     const hasSymptoms = healthData.symptoms && healthData.symptoms.length > 0;
 
     // Check for concerning mood (level 3 or below)
-    const hasConcerningMood = healthData.mood && healthData.mood.level != null && healthData.mood.level <= 3;
+    const hasConcerningMood =
+      healthData.mood && healthData.mood.level != null && healthData.mood.level <= 3;
 
     // Check for poor sleep
     const hasPoorSleep = healthData.sleep && healthData.sleep.quality === 'poor';

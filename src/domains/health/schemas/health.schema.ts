@@ -11,7 +11,13 @@ export const healthExtractionSchema = z.object({
     .array(
       z.object({
         name: z.string().describe('Symptom name (headache, fever, etc.)'),
-        severity: z.number().min(1).max(10).nullable().optional().describe('Severity on scale 1-10'),
+        severity: z
+          .number()
+          .min(1)
+          .max(10)
+          .nullable()
+          .optional()
+          .describe('Severity on scale 1-10'),
         duration: z.string().nullable().optional().describe('How long (e.g., "2 days", "3 hours")'),
         bodyPart: z.string().nullable().optional().describe('Affected body part'),
       })
@@ -24,7 +30,11 @@ export const healthExtractionSchema = z.object({
   mood: z
     .object({
       level: z.number().min(1).max(10).nullable().optional().describe('Overall mood level 1-10'),
-      emotion: z.string().nullable().optional().describe('Primary emotion (happy, sad, anxious, stressed, etc.)'),
+      emotion: z
+        .string()
+        .nullable()
+        .optional()
+        .describe('Primary emotion (happy, sad, anxious, stressed, etc.)'),
       triggers: z.array(z.string()).nullable().optional().describe('What triggered this mood'),
     })
     .nullable()
@@ -35,7 +45,11 @@ export const healthExtractionSchema = z.object({
   sleep: z
     .object({
       hours: z.number().nullable().optional().describe('Hours of sleep'),
-      quality: z.enum(['poor', 'fair', 'good', 'excellent']).nullable().optional().describe('Sleep quality'),
+      quality: z
+        .enum(['poor', 'fair', 'good', 'excellent'])
+        .nullable()
+        .optional()
+        .describe('Sleep quality'),
       issues: z
         .array(z.string())
         .nullable()
@@ -49,9 +63,17 @@ export const healthExtractionSchema = z.object({
   // Physical activity
   exercise: z
     .object({
-      type: z.string().nullable().optional().describe('Type of exercise (running, yoga, gym, etc.)'),
+      type: z
+        .string()
+        .nullable()
+        .optional()
+        .describe('Type of exercise (running, yoga, gym, etc.)'),
       duration: z.number().nullable().optional().describe('Duration in minutes'),
-      intensity: z.enum(['light', 'moderate', 'vigorous']).nullable().optional().describe('Exercise intensity'),
+      intensity: z
+        .enum(['light', 'moderate', 'vigorous'])
+        .nullable()
+        .optional()
+        .describe('Exercise intensity'),
     })
     .nullable()
     .optional()
@@ -120,7 +142,8 @@ export function hasHealthContent(data: HealthData): boolean {
  */
 export function getHealthSeverity(data: HealthData): 'normal' | 'moderate' | 'severe' {
   // Check symptom severity
-  const severities = data.symptoms?.map((s) => s.severity).filter((s): s is number => s != null) || [];
+  const severities =
+    data.symptoms?.map((s) => s.severity).filter((s): s is number => s != null) || [];
   const maxSymptomSeverity = severities.length > 0 ? Math.max(...severities) : 0;
 
   // Check mood level (low mood is concerning)

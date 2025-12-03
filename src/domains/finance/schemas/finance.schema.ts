@@ -10,7 +10,11 @@ export const financeExtractionSchema = z.object({
   transactions: z
     .array(
       z.object({
-        type: z.enum(['income', 'expense', 'transfer']).nullable().optional().describe('Transaction type'),
+        type: z
+          .enum(['income', 'expense', 'transfer'])
+          .nullable()
+          .optional()
+          .describe('Transaction type'),
         amount: z.number().nullable().optional().describe('Transaction amount'),
         currency: z.string().default('USD').describe('Currency code'),
         description: z.string().nullable().optional().describe('What the transaction was for'),
@@ -63,7 +67,11 @@ export const financeExtractionSchema = z.object({
       portfolio: z
         .array(
           z.object({
-            type: z.string().nullable().optional().describe('Investment type (stocks, bonds, crypto, etc.)'),
+            type: z
+              .string()
+              .nullable()
+              .optional()
+              .describe('Investment type (stocks, bonds, crypto, etc.)'),
             value: z.number().nullable().optional(),
             change: z.number().nullable().optional().describe('Recent change in value'),
           })
@@ -81,7 +89,11 @@ export const financeExtractionSchema = z.object({
   debt: z
     .array(
       z.object({
-        type: z.string().nullable().optional().describe('Type of debt (credit card, loan, mortgage)'),
+        type: z
+          .string()
+          .nullable()
+          .optional()
+          .describe('Type of debt (credit card, loan, mortgage)'),
         amount: z.number().nullable().optional().describe('Total debt amount'),
         interestRate: z.number().nullable().optional().describe('Interest rate percentage'),
         minimumPayment: z.number().nullable().optional(),
@@ -96,7 +108,11 @@ export const financeExtractionSchema = z.object({
     .array(
       z.object({
         topic: z.string().nullable().optional().describe('What the concern is about'),
-        severity: z.enum(['minor', 'moderate', 'major']).nullable().optional().describe('How serious'),
+        severity: z
+          .enum(['minor', 'moderate', 'major'])
+          .nullable()
+          .optional()
+          .describe('How serious'),
         details: z.string().nullable().optional(),
       })
     )

@@ -59,11 +59,12 @@ export class LLMService {
             maxTokens: options?.maxTokens || config.openai.maxTokens,
             // Split multi-line strings into arrays for readability in logs
             systemPrompt: systemPrompt.includes('\n') ? systemPrompt.split('\n') : systemPrompt,
-            messages: openAIMessages.map(msg => ({
+            messages: openAIMessages.map((msg) => ({
               role: msg.role,
-              content: typeof msg.content === 'string' && msg.content.includes('\n')
-                ? msg.content.split('\n')
-                : msg.content,
+              content:
+                typeof msg.content === 'string' && msg.content.includes('\n')
+                  ? msg.content.split('\n')
+                  : msg.content,
             })),
             messageCount: openAIMessages.length,
             totalPromptLength: openAIMessages.reduce(
@@ -142,11 +143,12 @@ export class LLMService {
             maxTokens: options?.maxTokens || config.openai.maxTokens,
             responseFormat: options?.responseFormat,
             // Split multi-line strings into arrays for readability in logs
-            messages: messages.map(msg => ({
+            messages: messages.map((msg) => ({
               role: msg.role,
-              content: typeof msg.content === 'string' && msg.content.includes('\n')
-                ? msg.content.split('\n')
-                : msg.content,
+              content:
+                typeof msg.content === 'string' && msg.content.includes('\n')
+                  ? msg.content.split('\n')
+                  : msg.content,
             })),
             messageCount: messages.length,
             totalPromptLength: messages.reduce(
