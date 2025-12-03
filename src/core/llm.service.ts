@@ -48,15 +48,35 @@ export class LLMService {
         },
       ];
 
-      logger.debug(
-        {
-          systemPromptLength: systemPrompt.length,
-          systemPromptPreview: systemPrompt.substring(0, 200),
-          messageCount: messages.length,
-          userMessageLength: userMessage.length,
-        },
-        'LLM Service: Calling OpenAI API'
-      );
+      // Verbose logging for debugging
+      if (config.logging.llmVerbose) {
+        logger.info(
+          {
+            type: 'LLM_REQUEST',
+            model: options?.model || config.openai.model,
+            temperature: options?.temperature ?? config.openai.temperature,
+            maxTokens: options?.maxTokens || config.openai.maxTokens,
+            systemPrompt,
+            messages: openAIMessages,
+            messageCount: openAIMessages.length,
+            totalPromptLength: openAIMessages.reduce(
+              (acc, msg) => acc + (msg.content?.length || 0),
+              0
+            ),
+          },
+          'LLM VERBOSE: Sending request to OpenAI'
+        );
+      } else {
+        logger.debug(
+          {
+            systemPromptLength: systemPrompt.length,
+            systemPromptPreview: systemPrompt.substring(0, 200),
+            messageCount: messages.length,
+            userMessageLength: userMessage.length,
+          },
+          'LLM Service: Calling OpenAI API'
+        );
+      }
 
       const completion = await this.client.chat.completions.create({
         model: options?.model || config.openai.model,
@@ -69,6 +89,21 @@ export class LLMService {
 
       if (!response) {
         throw new Error('No response from LLM');
+      }
+
+      // Verbose logging of response
+      if (config.logging.llmVerbose) {
+        logger.info(
+          {
+            type: 'LLM_RESPONSE',
+            model: completion.model,
+            usage: completion.usage,
+            responseLength: response.length,
+            response,
+            finishReason: completion.choices[0]?.finish_reason,
+          },
+          'LLM VERBOSE: Received response from OpenAI'
+        );
       }
 
       return response;

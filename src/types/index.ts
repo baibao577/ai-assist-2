@@ -86,6 +86,7 @@ export interface AppConfig {
   logging: {
     level: string;
     filePath: string;
+    llmVerbose?: boolean;
   };
   context: {
     messageLimit: number;

@@ -18,6 +18,10 @@ const envSchema = z.object({
   LLM_TEMPERATURE: z.string().default('0.7'),
   LLM_TIMEOUT: z.string().default('30000'),
   CONTEXT_MESSAGE_LIMIT: z.string().default('10'),
+  LLM_VERBOSE_LOGGING: z
+    .string()
+    .optional()
+    .transform((val) => val === 'true'),
 });
 
 // Parse and validate environment variables
@@ -38,6 +42,7 @@ export const config: AppConfig = {
   logging: {
     level: env.LOG_LEVEL,
     filePath: env.LOG_FILE_PATH,
+    llmVerbose: env.LLM_VERBOSE_LOGGING || false,
   },
   context: {
     messageLimit: parseInt(env.CONTEXT_MESSAGE_LIMIT, 10),

@@ -2,6 +2,7 @@
 
 import { logger } from '@/core/logger.js';
 import { llmService } from '@/core/llm.service.js';
+import { config } from '@/config/index.js';
 import type { IClassifier, ClassificationResult } from '@/types/classifiers.js';
 
 export abstract class BaseClassifier<
@@ -46,21 +47,61 @@ export abstract class BaseClassifier<
     try {
       const prompt = this.buildPrompt(input);
 
-      logger.debug(
-        {
-          classifier: this.name,
-          promptLength: prompt.length,
-        },
-        `${this.name}: Calling LLM`
-      );
+      // Verbose logging for debugging
+      if (config.logging.llmVerbose) {
+        logger.info(
+          {
+            type: 'CLASSIFIER_REQUEST',
+            classifier: this.name,
+            prompt,
+            promptLength: prompt.length,
+            options,
+          },
+          `CLASSIFIER VERBOSE [${this.name}]: Sending prompt to LLM`
+        );
+      } else {
+        logger.debug(
+          {
+            classifier: this.name,
+            promptLength: prompt.length,
+          },
+          `${this.name}: Calling LLM`
+        );
+      }
 
       const response = await llmService.generateResponse([], prompt, {
         maxTokens: options.maxTokens ?? 300,
         temperature: options.temperature ?? 0.3,
       });
 
+      // Verbose logging of response
+      if (config.logging.llmVerbose) {
+        logger.info(
+          {
+            type: 'CLASSIFIER_RESPONSE',
+            classifier: this.name,
+            response,
+            responseLength: response.length,
+          },
+          `CLASSIFIER VERBOSE [${this.name}]: Received response from LLM`
+        );
+      }
+
       const result = this.parseResponse(response);
       const duration = Date.now() - startTime;
+
+      // Verbose logging of parsed result
+      if (config.logging.llmVerbose) {
+        logger.info(
+          {
+            type: 'CLASSIFIER_RESULT',
+            classifier: this.name,
+            result,
+            duration,
+          },
+          `CLASSIFIER VERBOSE [${this.name}]: Parsed classification result`
+        );
+      }
 
       logger.info(
         {

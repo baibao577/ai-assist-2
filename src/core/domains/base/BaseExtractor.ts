@@ -33,14 +33,29 @@ export abstract class BaseExtractor {
       const startTime = Date.now();
       const prompt = this.buildExtractionPrompt(message, context);
 
-      logger.debug(
-        {
-          domainId: this.domainId,
-          messagePreview: message.substring(0, 50),
-          contextMessages: context.recentMessages.length,
-        },
-        'Starting extraction'
-      );
+      // Verbose logging for debugging
+      if (config.logging.llmVerbose) {
+        logger.info(
+          {
+            type: 'EXTRACTOR_REQUEST',
+            domainId: this.domainId,
+            prompt,
+            message,
+            contextMessages: context.recentMessages,
+            contextLength: context.recentMessages.length,
+          },
+          `EXTRACTOR VERBOSE [${this.domainId}]: Preparing extraction request`
+        );
+      } else {
+        logger.debug(
+          {
+            domainId: this.domainId,
+            messagePreview: message.substring(0, 50),
+            contextMessages: context.recentMessages.length,
+          },
+          'Starting extraction'
+        );
+      }
 
       // Use OpenAI structured output
       // Note: The parse method with Zod is not available in the current SDK version
@@ -64,6 +79,21 @@ export abstract class BaseExtractor {
       });
 
       const content = completion.choices[0]?.message?.content;
+
+      // Verbose logging of raw response
+      if (config.logging.llmVerbose) {
+        logger.info(
+          {
+            type: 'EXTRACTOR_RAW_RESPONSE',
+            domainId: this.domainId,
+            response: content,
+            usage: completion.usage,
+            model: completion.model,
+          },
+          `EXTRACTOR VERBOSE [${this.domainId}]: Received raw response`
+        );
+      }
+
       if (!content) {
         logger.debug(
           {
@@ -89,6 +119,18 @@ export abstract class BaseExtractor {
         return null;
       }
 
+      // Verbose logging of parsed JSON
+      if (config.logging.llmVerbose) {
+        logger.info(
+          {
+            type: 'EXTRACTOR_PARSED_JSON',
+            domainId: this.domainId,
+            parsedData: parsed,
+          },
+          `EXTRACTOR VERBOSE [${this.domainId}]: Parsed JSON response`
+        );
+      }
+
       // Validate with Zod schema
       const validation = this.schema.safeParse(parsed);
       if (!validation.success) {
@@ -105,6 +147,18 @@ export abstract class BaseExtractor {
       // Validate and transform the extracted data
       const extractedData = this.validateAndTransform(validation.data);
 
+      // Verbose logging of transformed data
+      if (config.logging.llmVerbose) {
+        logger.info(
+          {
+            type: 'EXTRACTOR_TRANSFORMED',
+            domainId: this.domainId,
+            extractedData,
+          },
+          `EXTRACTOR VERBOSE [${this.domainId}]: Transformed extracted data`
+        );
+      }
+
       // If confidence is 0, treat as no extraction
       if (extractedData.confidence === 0) {
         logger.debug(
@@ -120,17 +174,35 @@ export abstract class BaseExtractor {
 
       const duration = Date.now() - startTime;
       const dataObj = validation.data as Record<string, any>;
-      logger.info(
-        {
-          domainId: this.domainId,
-          confidence: extractedData.confidence,
-          duration,
-          fieldsExtracted: Object.keys(dataObj).filter(
-            (k) => dataObj[k] !== null && dataObj[k] !== undefined
-          ).length,
-        },
-        'Extraction complete'
-      );
+
+      // Verbose logging of final result
+      if (config.logging.llmVerbose) {
+        logger.info(
+          {
+            type: 'EXTRACTOR_FINAL_RESULT',
+            domainId: this.domainId,
+            extractedData,
+            confidence: extractedData.confidence,
+            duration,
+            fieldsExtracted: Object.keys(dataObj).filter(
+              (k) => dataObj[k] !== null && dataObj[k] !== undefined
+            ),
+          },
+          `EXTRACTOR VERBOSE [${this.domainId}]: Extraction complete`
+        );
+      } else {
+        logger.info(
+          {
+            domainId: this.domainId,
+            confidence: extractedData.confidence,
+            duration,
+            fieldsExtracted: Object.keys(dataObj).filter(
+              (k) => dataObj[k] !== null && dataObj[k] !== undefined
+            ).length,
+          },
+          'Extraction complete'
+        );
+      }
 
       return extractedData;
     } catch (error) {

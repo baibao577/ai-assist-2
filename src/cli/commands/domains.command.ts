@@ -172,7 +172,7 @@ async function interactiveConfig(): Promise<void> {
         default: currentConfig.extractionConfig?.confidenceThreshold || 0.5,
         when: (answers) => answers.enabled,
         validate: (value) => {
-          const num = parseFloat(value);
+          const num = parseFloat(String(value));
           if (isNaN(num) || num < 0 || num > 1) {
             return 'Please enter a number between 0 and 1';
           }
