@@ -276,10 +276,12 @@ This information was automatically extracted from the conversation. Use it to pr
 
       for (const [domainId, history] of Object.entries(state.domainHistory)) {
         if (Array.isArray(history) && history.length > 0) {
-          // Format history entries for each domain
-          historySummary[domainId] = history.slice(0, 5).map((entry) => ({
+          // Format ALL history entries loaded from database (respects DOMAIN_HISTORY_LIMIT config)
+          historySummary[domainId] = history.map((entry) => ({
             data: this.summarizeDomainData(domainId, entry.data),
-            daysAgo: Math.round((Date.now() - new Date(entry.extractedAt).getTime()) / (1000 * 60 * 60 * 24)),
+            daysAgo: Math.round(
+              (Date.now() - new Date(entry.extractedAt).getTime()) / (1000 * 60 * 60 * 24)
+            ),
             confidence: entry.confidence,
           }));
         }
@@ -319,18 +321,24 @@ This historical data shows patterns over time. Use it to:
     // Extract only key fields based on domain type
     if (domainId === 'health') {
       return {
-        symptoms: data.symptoms?.map((s: any) => ({
-          name: s.name,
-          severity: s.severity
-        })).filter(Boolean),
-        mood: data.mood ? {
-          emotion: data.mood.emotion,
-          level: data.mood.level
-        } : undefined,
-        sleep: data.sleep ? {
-          quality: data.sleep.quality,
-          hours: data.sleep.hours
-        } : undefined,
+        symptoms: data.symptoms
+          ?.map((s: any) => ({
+            name: s.name,
+            severity: s.severity,
+          }))
+          .filter(Boolean),
+        mood: data.mood
+          ? {
+              emotion: data.mood.emotion,
+              level: data.mood.level,
+            }
+          : undefined,
+        sleep: data.sleep
+          ? {
+              quality: data.sleep.quality,
+              hours: data.sleep.hours,
+            }
+          : undefined,
       };
     } else if (domainId === 'finance') {
       return {
@@ -341,10 +349,12 @@ This historical data shows patterns over time. Use it to:
     }
 
     // For unknown domains, return minimal summary
-    return Object.keys(data).slice(0, 3).reduce((acc: any, key: string) => {
-      acc[key] = data[key];
-      return acc;
-    }, {});
+    return Object.keys(data)
+      .slice(0, 3)
+      .reduce((acc: any, key: string) => {
+        acc[key] = data[key];
+        return acc;
+      }, {});
   }
 
   /**
