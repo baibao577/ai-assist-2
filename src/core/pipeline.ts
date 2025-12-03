@@ -1,5 +1,5 @@
-// Pipeline for MVP v3+ with Domains Framework
-// Stages: Load → Decay → Classification → Global → Extraction → Steering → Handle → Save
+// Pipeline for MVP v3+ with Domains Framework - Parallelized Version
+// Stages: Load → Decay → Classification → Parallel(Global + Domains) → Handle → Save
 
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -9,9 +9,19 @@ import {
 } from '@/database/repositories/index.js';
 import { decayStage } from '@/core/stages/decay.stage.js';
 import { globalStage } from '@/core/stages/global.stage.js';
-import { extractionStage } from '@/core/stages/extraction.stage.js';
-import { steeringStage } from '@/core/stages/steering.stage.js';
-import { safetyClassifier, intentClassifier, arbiter } from '@/core/classifiers/index.js';
+import {
+  safetyClassifier,
+  intentClassifier,
+  arbiter,
+  DomainRelevanceClassifier,
+} from '@/core/classifiers/index.js';
+import {
+  domainRegistry,
+  extractorRegistry,
+  steeringRegistry,
+} from '@/core/domains/registries/index.js';
+import { domainConfig } from '@/core/domains/config/DomainConfig.js';
+import { StorageFactory } from '@/core/domains/storage/index.js';
 import { consultHandler } from '@/core/modes/consult.handler.js';
 import { smalltalkHandler } from '@/core/modes/smalltalk.handler.js';
 import { metaHandler } from '@/core/modes/meta.handler.js';
@@ -34,9 +44,25 @@ import {
   type SafetyResult,
   type IntentResult,
 } from '@/types/index.js';
+import type { ExtractedData, DomainDefinition, SteeringHints } from '@/core/domains/types.js';
+
+// Helper types for parallel operations
+interface DomainExtractionResult {
+  domainId: string;
+  extracted: boolean;
+  data: ExtractedData | null;
+  error?: Error;
+}
+
+interface SteeringResult {
+  domainId: string;
+  hints: SteeringHints | null;
+  error?: Error;
+}
 
 export class Pipeline {
   private modeHandlers: Map<ConversationMode, IModeHandler>;
+  private domainClassifier: DomainRelevanceClassifier;
 
   constructor() {
     // Register mode handlers
@@ -44,11 +70,14 @@ export class Pipeline {
     this.modeHandlers.set(ConversationMode.CONSULT, consultHandler);
     this.modeHandlers.set(ConversationMode.SMALLTALK, smalltalkHandler);
     this.modeHandlers.set(ConversationMode.META, metaHandler);
+
+    // Initialize domain classifier
+    this.domainClassifier = new DomainRelevanceClassifier();
   }
 
   /**
-   * Execute the full pipeline for a user message (MVP v3+ with Domains)
-   * Stages: Load → Decay → Classification → Global → Extraction → Steering → Handle → Save
+   * Execute the full pipeline for a user message (MVP v3+ with Parallel Optimization)
+   * Stages: Load → Decay → Classification → Parallel Enrichment → Handle → Save
    */
   async execute(context: PipelineContext): Promise<PipelineResult> {
     const startTime = Date.now();
@@ -84,61 +113,14 @@ export class Pipeline {
         decayedState
       );
 
-      // Stage 4: Global - Extract context elements from classification
-      const { state: stateWithContext } = await globalStage.execute({
-        message: context.message,
-        state: decayedState,
-        safetyResult,
-        intentResult,
-      });
-
-      logger.info(
-        {
-          conversationId: conversation.id,
-          contextElements: stateWithContext.contextElements.length,
-          contextByType: this.countContextByType(stateWithContext.contextElements),
-        },
-        'Global stage: Context elements extracted'
+      // Stage 4: Parallel Enrichment (Global + Domain Classification + Extraction + Steering)
+      const enrichedState = await this.parallelEnrichmentStage(
+        context,
+        messages,
+        decayedState,
+        { decision, safetyResult, intentResult },
+        conversation.id
       );
-
-      // Prepare state with messages and userId for domain stages
-      const stateForDomains = {
-        ...stateWithContext,
-        messages: [
-          ...messages.map((m) => ({ role: m.role, content: m.content })),
-          { role: 'user', content: context.message },
-        ],
-        userId: context.userId,
-        conversationId: conversation.id,
-      };
-
-      // Stage 4.5: Domain Extraction (NEW - MVP v3 Domains Framework)
-      const stateWithExtractions = await extractionStage.process(stateForDomains);
-
-      if (stateWithExtractions.metadata?.activeDomains?.length) {
-        logger.info(
-          {
-            conversationId: conversation.id,
-            extractedDomains: stateWithExtractions.metadata.activeDomains,
-            extractionCount: Object.keys(stateWithExtractions.extractions || {}).length,
-          },
-          'Extraction stage: Domain data extracted'
-        );
-      }
-
-      // Stage 4.6: Conversation Steering (NEW - MVP v3 Domains Framework)
-      const stateWithSteering = await steeringStage.process(stateWithExtractions);
-
-      if (stateWithSteering.steeringHints?.suggestions.length) {
-        logger.info(
-          {
-            conversationId: conversation.id,
-            steeringStrategies: stateWithSteering.metadata?.steeringApplied || [],
-            suggestionCount: stateWithSteering.steeringHints.suggestions.length,
-          },
-          'Steering stage: Conversation guidance generated'
-        );
-      }
 
       // Stage 5: Handle message with appropriate mode handler
       const handler = this.modeHandlers.get(decision.finalMode);
@@ -154,8 +136,10 @@ export class Pipeline {
           isCrisis: decision.safetyContext.isCrisis,
           contextProvided: {
             messages: messages.length,
-            contextElements: decayedState.contextElements.length,
-            activeGoals: decayedState.goals.filter((g) => g.status === 'active').length,
+            contextElements: enrichedState.contextElements.length,
+            activeGoals: enrichedState.goals.filter((g) => g.status === 'active').length,
+            activeDomains: enrichedState.metadata?.activeDomains?.length || 0,
+            steeringHints: enrichedState.steeringHints?.suggestions?.length || 0,
           },
         },
         'Handler stage: Routing to mode handler'
@@ -164,8 +148,8 @@ export class Pipeline {
       // Build classification context for handler
       const classificationContext: ClassificationContext = {
         decision,
-        safetySignals: [], // Will be populated from safety result
-        entities: [], // Will be populated from intent result
+        safetySignals: safetyResult.signals || [],
+        entities: intentResult.entities || [],
       };
 
       const handlerResult = await handler.handle({
@@ -174,7 +158,7 @@ export class Pipeline {
         message: context.message,
         messages: messages.map((m) => ({ role: m.role, content: m.content })),
         currentMode: decision.finalMode,
-        state: stateWithSteering as any, // Use enhanced state with extractions and steering
+        state: enrichedState as any, // Use fully enriched state
         classification: classificationContext,
       });
 
@@ -183,7 +167,7 @@ export class Pipeline {
         conversation.id,
         context.message,
         handlerResult.response,
-        stateWithSteering, // Save enhanced state
+        enrichedState,
         decision.finalMode
       );
 
@@ -199,6 +183,429 @@ export class Pipeline {
       throw new PipelineError('pipeline', error as Error, context);
     }
   }
+
+  /**
+   * Parallel enrichment of state with context, extractions, and steering
+   * Groups parallel operations while maintaining clear logging
+   */
+  private async parallelEnrichmentStage(
+    context: PipelineContext,
+    messages: Message[],
+    decayedState: ConversationState,
+    classificationResults: {
+      decision: ArbiterDecision;
+      safetyResult: SafetyResult;
+      intentResult: IntentResult;
+    },
+    conversationId: string
+  ): Promise<ConversationState> {
+    const parallelStart = Date.now();
+
+    // === PARALLEL GROUP 1: Global Context + Domain Classification ===
+    const parallelGroup1Start = Date.now();
+
+    const [globalResult, domainClassification] = await Promise.all([
+      // 4a: Global context extraction
+      globalStage.execute({
+        message: context.message,
+        state: decayedState,
+        safetyResult: classificationResults.safetyResult,
+        intentResult: classificationResults.intentResult,
+      }),
+
+      // 4b: Domain relevance classification
+      this.classifyDomainsAsync(decayedState),
+    ]);
+
+    // Preserve existing global stage logging
+    logger.info(
+      {
+        conversationId,
+        contextElements: globalResult.state.contextElements.length,
+        contextByType: this.countContextByType(globalResult.state.contextElements),
+      },
+      'Global stage: Context elements extracted'
+    );
+
+    // Log parallel group 1 timing
+    logger.info(
+      {
+        conversationId,
+        relevantDomains: domainClassification.map((d) => d.id),
+        parallelGroup1Ms: Date.now() - parallelGroup1Start,
+      },
+      'Parallel Group 1: Global context + Domain classification complete'
+    );
+
+    // If no domains are relevant, return early with just global context
+    if (domainClassification.length === 0) {
+      logger.debug('No relevant domains found, skipping extraction/steering');
+      return globalResult.state;
+    }
+
+    // Prepare state for domain operations
+    const stateForDomains = {
+      ...globalResult.state,
+      messages: [
+        ...messages.map((m) => ({ role: m.role, content: m.content })),
+        { role: 'user' as const, content: context.message },
+      ],
+      userId: context.userId,
+      conversationId,
+    };
+
+    // === PARALLEL GROUP 2: Domain Extractions ===
+    const parallelGroup2Start = Date.now();
+
+    // Run all domain extractions in parallel
+    const extractionResults = await Promise.all(
+      domainClassification.map((domain) =>
+        this.extractForSingleDomain(domain, stateForDomains, context.message)
+      )
+    );
+
+    // Merge extraction results into state
+    const stateWithExtractions = this.mergeExtractionResults(stateForDomains, extractionResults);
+
+    // Store extractions if configured
+    await this.storeExtractions(extractionResults, stateWithExtractions);
+
+    // Preserve existing extraction logging
+    if (stateWithExtractions.metadata?.activeDomains?.length) {
+      logger.info(
+        {
+          conversationId,
+          extractedDomains: stateWithExtractions.metadata.activeDomains,
+          extractionCount: Object.keys(stateWithExtractions.extractions || {}).length,
+          parallelGroup2Ms: Date.now() - parallelGroup2Start,
+        },
+        'Parallel Group 2: Domain extractions complete'
+      );
+    }
+
+    // === PARALLEL GROUP 3: Steering Strategies ===
+    const parallelGroup3Start = Date.now();
+
+    // Run all steering strategies in parallel for extracted domains
+    const steeringResults = await Promise.all(
+      extractionResults
+        .filter((r) => r.extracted && r.data)
+        .map((result) => this.generateSteeringForDomain(result.domainId, stateWithExtractions))
+    );
+
+    // Merge steering hints
+    const finalState = this.mergeSteeringResults(stateWithExtractions, steeringResults);
+
+    // Preserve existing steering logging
+    if (finalState.steeringHints?.suggestions.length) {
+      logger.info(
+        {
+          conversationId,
+          steeringStrategies: finalState.metadata?.steeringApplied || [],
+          suggestionCount: finalState.steeringHints.suggestions.length,
+          parallelGroup3Ms: Date.now() - parallelGroup3Start,
+        },
+        'Parallel Group 3: Steering strategies complete'
+      );
+    }
+
+    // Log total parallel processing time
+    logger.info(
+      {
+        conversationId,
+        totalParallelMs: Date.now() - parallelStart,
+        domains: domainClassification.length,
+        extractions: extractionResults.filter((r) => r.extracted).length,
+        steeringHints: finalState.steeringHints?.suggestions.length || 0,
+      },
+      'Parallel enrichment stage complete'
+    );
+
+    return finalState;
+  }
+
+  // === Helper Methods for Parallel Operations (ordered by execution flow) ===
+
+  /**
+   * Classify which domains are relevant for the conversation
+   */
+  private async classifyDomainsAsync(state: ConversationState): Promise<DomainDefinition[]> {
+    // Check if domain system is enabled
+    if (!domainConfig.isEnabled()) {
+      logger.debug('Domain system disabled');
+      return [];
+    }
+
+    // Classify domains using the domain relevance classifier
+    const relevantDomains = await this.domainClassifier.classifyDomains(state);
+
+    // Filter to only enabled domains
+    const enabledDomains = relevantDomains.filter((d) => domainConfig.isDomainEnabled(d.id));
+
+    logger.debug(
+      {
+        totalRelevant: relevantDomains.length,
+        enabledRelevant: enabledDomains.length,
+        domains: enabledDomains.map((d) => ({ id: d.id, priority: d.priority })),
+      },
+      'Domain classification complete'
+    );
+
+    return enabledDomains;
+  }
+
+  /**
+   * Extract data for a single domain
+   */
+  private async extractForSingleDomain(
+    domain: DomainDefinition,
+    state: ConversationState,
+    currentMessage: string
+  ): Promise<DomainExtractionResult> {
+    try {
+      const extractor = extractorRegistry.getExtractor(domain.id);
+      if (!extractor) {
+        logger.warn({ domainId: domain.id }, 'No extractor found for domain');
+        return { domainId: domain.id, extracted: false, data: null };
+      }
+
+      // Get extraction config for this domain
+      const extractionConfig = domainConfig.getExtractionConfig(domain.id);
+
+      const context = {
+        recentMessages: (state.messages || []).slice(-5).map((m) => ({
+          role: m.role as string,
+          content: m.content,
+        })),
+        domainContext: state.domainContext?.[domain.id] || {},
+      };
+
+      const extraction = await extractor.extract(currentMessage, context);
+
+      // Check confidence threshold
+      if (extraction && extraction.confidence >= (extractionConfig?.confidenceThreshold || 0.5)) {
+        logger.debug(
+          {
+            domainId: domain.id,
+            confidence: extraction.confidence,
+            fieldsExtracted: Object.keys(extraction.data).length,
+          },
+          'Domain extraction successful'
+        );
+
+        return {
+          domainId: domain.id,
+          extracted: true,
+          data: extraction,
+        };
+      }
+
+      return { domainId: domain.id, extracted: false, data: null };
+    } catch (error) {
+      logger.error(
+        {
+          domainId: domain.id,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        'Domain extraction failed'
+      );
+
+      return {
+        domainId: domain.id,
+        extracted: false,
+        data: null,
+        error: error as Error,
+      };
+    }
+  }
+
+  /**
+   * Merge extraction results into state
+   */
+  private mergeExtractionResults(
+    state: ConversationState,
+    results: DomainExtractionResult[]
+  ): ConversationState {
+    const extractions: Record<string, ExtractedData[]> = {};
+    const activeDomains: string[] = [];
+
+    for (const result of results) {
+      if (result.extracted && result.data) {
+        // Initialize array for domain if not exists
+        if (!extractions[result.domainId]) {
+          extractions[result.domainId] = [];
+        }
+
+        // Add extraction to domain array
+        extractions[result.domainId].push(result.data);
+        activeDomains.push(result.domainId);
+      }
+    }
+
+    return {
+      ...state,
+      extractions,
+      metadata: {
+        ...state.metadata,
+        activeDomains,
+      },
+    };
+  }
+
+  /**
+   * Store extractions to domain storage
+   */
+  private async storeExtractions(
+    results: DomainExtractionResult[],
+    state: ConversationState
+  ): Promise<void> {
+    // Store extractions in parallel
+    const storagePromises = results
+      .filter((r) => r.extracted && r.data)
+      .map(async (result) => {
+        try {
+          const domain = domainRegistry.getDomain(result.domainId);
+          if (domain?.config.storageConfig) {
+            const storage = StorageFactory.create(result.domainId, domain.config.storageConfig);
+
+            const dataWithContext = {
+              ...result.data!.data,
+              userId: state.userId || 'unknown',
+              conversationId: state.conversationId,
+              confidence: result.data!.confidence,
+            };
+
+            await storage.store(dataWithContext);
+
+            logger.debug({ domainId: result.domainId }, 'Domain data stored successfully');
+          }
+        } catch (error) {
+          logger.error(
+            {
+              domainId: result.domainId,
+              error: error instanceof Error ? error.message : String(error),
+            },
+            'Failed to store domain data'
+          );
+        }
+      });
+
+    await Promise.all(storagePromises);
+  }
+
+  /**
+   * Generate steering for a single domain
+   */
+  private async generateSteeringForDomain(
+    domainId: string,
+    state: ConversationState
+  ): Promise<SteeringResult> {
+    try {
+      const strategies = steeringRegistry.getStrategiesForDomain(domainId);
+
+      if (strategies.length === 0) {
+        logger.debug({ domainId }, 'No steering strategies found for domain');
+        return { domainId, hints: null };
+      }
+
+      // Get domain extraction for this domain
+      const domainExtraction = state.extractions?.[domainId];
+      if (!domainExtraction || domainExtraction.length === 0) {
+        return { domainId, hints: null };
+      }
+
+      // Generate steering hints from all strategies for this domain
+      const allHints: string[] = [];
+      let priority = 0.5;
+
+      for (const strategy of strategies) {
+        // Generate hints using the strategy (strategy has access to state with extractions)
+        const hints = await strategy.generateHints(state);
+
+        if (hints && hints.suggestions.length > 0) {
+          allHints.push(...hints.suggestions);
+          priority = Math.max(priority, hints.priority || 0.5);
+        }
+      }
+
+      if (allHints.length > 0) {
+        logger.debug(
+          {
+            domainId,
+            suggestionsGenerated: allHints.length,
+            strategies: strategies.length,
+          },
+          'Steering hints generated for domain'
+        );
+
+        return {
+          domainId,
+          hints: {
+            type: domainId,
+            priority,
+            suggestions: allHints,
+            context: { domainId },
+          },
+        };
+      }
+
+      return { domainId, hints: null };
+    } catch (error) {
+      logger.error(
+        {
+          domainId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        'Steering generation failed'
+      );
+
+      return {
+        domainId,
+        hints: null,
+        error: error as Error,
+      };
+    }
+  }
+
+  /**
+   * Merge steering results into final state
+   */
+  private mergeSteeringResults(
+    state: ConversationState,
+    results: SteeringResult[]
+  ): ConversationState {
+    const allSuggestions: string[] = [];
+    const strategiesApplied: string[] = [];
+    let maxPriority = 0.5;
+
+    for (const result of results) {
+      if (result.hints && result.hints.suggestions.length > 0) {
+        allSuggestions.push(...result.hints.suggestions);
+        strategiesApplied.push(result.domainId);
+        maxPriority = Math.max(maxPriority, result.hints.priority || 0.5);
+      }
+    }
+
+    if (allSuggestions.length === 0) {
+      return state;
+    }
+
+    return {
+      ...state,
+      steeringHints: {
+        type: strategiesApplied.length > 1 ? 'multi-domain' : strategiesApplied[0],
+        priority: maxPriority,
+        suggestions: allSuggestions,
+        context: { domains: strategiesApplied },
+      },
+      metadata: {
+        ...state.metadata,
+        steeringApplied: strategiesApplied,
+      },
+    };
+  }
+
+  // === Existing Methods (unchanged) ===
 
   /**
    * Classification Stage: Sequential Safety → Intent → Arbiter (MVP v3+)
