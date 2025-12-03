@@ -9,6 +9,8 @@
   "scripts": {
     "dev": "tsx watch src/cli.ts",
     "cli": "tsx src/cli.ts",
+    "cli:debug": "node --inspect=9229 --import tsx src/cli.ts",
+    "cli:debug-brk": "node --inspect-brk=9229 --import tsx src/cli.ts",
     "cli:raw": "tsx src/cli.ts",
     "build": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.ts\"",

@@ -107,3 +107,89 @@ User: Actually, what is your name?
 Background Context: topic: time management
 
     [Then answers the meta question with empathy]"
+
+---
+
+### Test Dialogue 1: Health Domain Activation
+
+**User:** "Hi there"
+
+- **Expected:** Normal greeting
+
+**User:** "I've been having terrible headaches for the past 3 days, maybe 7/10 pain"
+
+- **Health Extraction:**
+  - symptoms: [{name: "headaches", severity: 7, duration: "3 days", bodyPart: "head"}]
+  - confidence: ~0.8
+- **Steering Hints Generated:**
+  - "Have you noticed any triggers for these headaches?"
+  - "Are you experiencing any other symptoms?"
+  - "Have you taken any medication for the pain?"
+
+**User:** "Yeah, I took some ibuprofen but it's not helping much"
+
+- **Health Extraction:**
+  - medications: [{name: "ibuprofen", reason: "headaches"}]
+- **AI Response:** Should acknowledge medication and suggest alternatives or medical consultation
+
+### Test Dialogue 2: Finance Domain Activation
+
+**User:** "I spent $500 on groceries this month, that seems like a lot"
+
+- **Finance Extraction:**
+  - transactions: [{type: "expense", amount: 500, category: "groceries", description: "monthly groceries"}]
+  - concerns: [{topic: "high spending", severity: "moderate"}]
+- **Steering Hints:**
+  - "Would you like help creating a budget for groceries?"
+  - "What's your target monthly spending limit?"
+  - "Would you like tips for reducing grocery expenses?"
+
+**User:** "My goal is to save $5000 for vacation by next summer"
+
+- **Finance Extraction:**
+  - goals: [{name: "vacation", targetAmount: 5000, deadline: "next summer"}]
+- **Steering:** "What's your monthly savings plan to reach your vacation goal?"
+
+### Test Dialogue 3: Multi-Domain Conversation
+
+**User:** "I'm stressed about money and it's affecting my sleep"
+
+- **Health Extraction:**
+  - mood: {emotion: "stressed", triggers: ["money"]}
+  - sleep: {issues: ["stress-related"]}
+- **Finance Extraction:**
+  - concerns: [{topic: "financial stress", severity: "major"}]
+- **Cross-Domain Steering:**
+  - "Tell me more about your financial concerns"
+  - "How many hours of sleep are you getting?"
+  - "Would stress management techniques help?"
+
+### Test Dialogue 4: Domain Persistence & Context
+
+**User:** "Hi, how's it going?"
+
+- Normal greeting
+
+**User:** "My back has been hurting, especially after exercise"
+
+- **Health Extraction:** symptoms: [{name: "back pain", bodyPart: "back"}]
+
+**User:** "What's the weather like?"
+
+- **AI should reference:** Previous health context while answering
+- **Example:** "The weather is sunny today. By the way, for your back pain, gentle stretching might help..."
+
+### Test Dialogue 5: Complex Extraction
+
+**User:** "I ran 5k this morning in 25 minutes, felt great! Blood pressure was 120/80 at the gym"
+
+- **Health Extraction:**
+  - exercise: {type: "running", duration: 25, intensity: "moderate"}
+  - vitals: {bloodPressure: "120/80"}
+  - mood: {emotion: "positive"}
+
+**User:** "I'm trying to budget $200/month for gym and health expenses"
+
+- **Finance Extraction:**
+  - budget: {categories: [{name: "health/gym", amount: 200}]}
+- **Cross-reference:** Both domains active, AI can connect fitness goals with budget

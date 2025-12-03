@@ -104,7 +104,10 @@ export class Pipeline {
       // Prepare state with messages and userId for domain stages
       const stateForDomains = {
         ...stateWithContext,
-        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        messages: [
+          ...messages.map((m) => ({ role: m.role, content: m.content })),
+          { role: 'user', content: context.message },
+        ],
         userId: context.userId,
         conversationId: conversation.id,
       };
