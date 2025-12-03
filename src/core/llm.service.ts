@@ -57,8 +57,14 @@ export class LLMService {
             model: options?.model || config.openai.model,
             temperature: options?.temperature ?? config.openai.temperature,
             maxTokens: options?.maxTokens || config.openai.maxTokens,
-            systemPrompt,
-            messages: openAIMessages,
+            // Split multi-line strings into arrays for readability in logs
+            systemPrompt: systemPrompt.includes('\n') ? systemPrompt.split('\n') : systemPrompt,
+            messages: openAIMessages.map(msg => ({
+              role: msg.role,
+              content: typeof msg.content === 'string' && msg.content.includes('\n')
+                ? msg.content.split('\n')
+                : msg.content,
+            })),
             messageCount: openAIMessages.length,
             totalPromptLength: openAIMessages.reduce(
               (acc, msg) => acc + (msg.content?.length || 0),
@@ -100,7 +106,8 @@ export class LLMService {
             model: completion.model,
             usage: completion.usage,
             responseLength: response.length,
-            response,
+            // Split multi-line response for readability
+            response: response.includes('\n') ? response.split('\n') : response,
             finishReason: completion.choices[0]?.finish_reason,
           },
           'LLM VERBOSE: Received response from OpenAI'
@@ -134,7 +141,13 @@ export class LLMService {
             temperature: options?.temperature ?? config.openai.temperature,
             maxTokens: options?.maxTokens || config.openai.maxTokens,
             responseFormat: options?.responseFormat,
-            messages,
+            // Split multi-line strings into arrays for readability in logs
+            messages: messages.map(msg => ({
+              role: msg.role,
+              content: typeof msg.content === 'string' && msg.content.includes('\n')
+                ? msg.content.split('\n')
+                : msg.content,
+            })),
             messageCount: messages.length,
             totalPromptLength: messages.reduce(
               (acc, msg) => acc + ((msg.content as string)?.length || 0),
@@ -182,7 +195,8 @@ export class LLMService {
             model: completion.model,
             usage: completion.usage,
             responseLength: response.length,
-            response,
+            // Split multi-line response for readability
+            response: response.includes('\n') ? response.split('\n') : response,
             finishReason: completion.choices[0]?.finish_reason,
           },
           'LLM VERBOSE: Received response from OpenAI (raw messages)'
