@@ -14,6 +14,8 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
   LOG_FILE_PATH: z.string().default('./logs/app.log'),
   LLM_MODEL: z.string().default('gpt-4o'),
+  LLM_CLASSIFIER_MODEL: z.string().optional(), // Model for classifiers, falls back to LLM_MODEL
+  LLM_EXTRACTOR_MODEL: z.string().optional(), // Model for extractors, falls back to LLM_MODEL
   LLM_MAX_TOKENS: z.string().default('4096'),
   LLM_TEMPERATURE: z.string().default('0.7'),
   LLM_TIMEOUT: z.string().default('30000'),
@@ -32,6 +34,8 @@ export const config: AppConfig = {
   openai: {
     apiKey: env.OPENAI_API_KEY,
     model: env.LLM_MODEL,
+    classifierModel: env.LLM_CLASSIFIER_MODEL || env.LLM_MODEL, // Falls back to LLM_MODEL if not set
+    extractorModel: env.LLM_EXTRACTOR_MODEL || env.LLM_MODEL, // Falls back to LLM_MODEL if not set
     maxTokens: parseInt(env.LLM_MAX_TOKENS, 10),
     temperature: parseFloat(env.LLM_TEMPERATURE),
     timeout: parseInt(env.LLM_TIMEOUT, 10),

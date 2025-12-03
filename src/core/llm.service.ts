@@ -9,6 +9,7 @@ export interface LLMOptions {
   temperature?: number;
   model?: string;
   systemPrompt?: string; // Custom system prompt (overrides default)
+  responseFormat?: { type: 'json_object' | 'text' }; // Response format for structured output
 }
 
 export class LLMService {
@@ -103,6 +104,88 @@ export class LLMService {
             finishReason: completion.choices[0]?.finish_reason,
           },
           'LLM VERBOSE: Received response from OpenAI'
+        );
+      }
+
+      return response;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(`LLM error: ${error.message}`);
+      }
+      throw new Error('Unknown LLM error');
+    }
+  }
+
+  /**
+   * Generate response from raw OpenAI message array
+   * Useful for extractors and other components that need direct control over messages
+   */
+  async generateFromMessages(
+    messages: OpenAI.Chat.ChatCompletionMessageParam[],
+    options?: LLMOptions
+  ): Promise<string> {
+    try {
+      // Verbose logging for debugging
+      if (config.logging.llmVerbose) {
+        logger.info(
+          {
+            type: 'LLM_REQUEST',
+            model: options?.model || config.openai.model,
+            temperature: options?.temperature ?? config.openai.temperature,
+            maxTokens: options?.maxTokens || config.openai.maxTokens,
+            responseFormat: options?.responseFormat,
+            messages,
+            messageCount: messages.length,
+            totalPromptLength: messages.reduce(
+              (acc, msg) => acc + ((msg.content as string)?.length || 0),
+              0
+            ),
+          },
+          'LLM VERBOSE: Sending request to OpenAI (raw messages)'
+        );
+      } else {
+        logger.debug(
+          {
+            messageCount: messages.length,
+            responseFormat: options?.responseFormat?.type,
+          },
+          'LLM Service: Calling OpenAI API with raw messages'
+        );
+      }
+
+      // Build completion request with optional response format
+      const completionRequest: OpenAI.Chat.ChatCompletionCreateParams = {
+        model: options?.model || config.openai.model,
+        messages,
+        max_tokens: options?.maxTokens || config.openai.maxTokens,
+        temperature: options?.temperature ?? config.openai.temperature,
+      };
+
+      // Add response format if specified
+      if (options?.responseFormat) {
+        completionRequest.response_format = options.responseFormat;
+      }
+
+      const completion = await this.client.chat.completions.create(completionRequest);
+
+      const response = completion.choices[0]?.message?.content ?? '';
+
+      if (!response) {
+        throw new Error('No response from LLM');
+      }
+
+      // Verbose logging of response
+      if (config.logging.llmVerbose) {
+        logger.info(
+          {
+            type: 'LLM_RESPONSE',
+            model: completion.model,
+            usage: completion.usage,
+            responseLength: response.length,
+            response,
+            finishReason: completion.choices[0]?.finish_reason,
+          },
+          'LLM VERBOSE: Received response from OpenAI (raw messages)'
         );
       }
 

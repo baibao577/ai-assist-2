@@ -73,7 +73,7 @@ export class GoalPlanningStrategy extends BaseSteeringStrategy {
       for (const goal of financeData.goals) {
         // Check progress
         if (goal.currentAmount !== null && goal.currentAmount !== undefined) {
-          const progress = (goal.currentAmount / goal.targetAmount) * 100;
+          const progress = (goal.currentAmount / (goal.targetAmount || 0)) * 100;
           if (progress < 25) {
             suggestions.push(
               `You're at ${progress.toFixed(0)}% of your ${goal.name} goal. What's your savings strategy?`
@@ -146,7 +146,7 @@ export class GoalPlanningStrategy extends BaseSteeringStrategy {
     if (!data.goals) return 0;
 
     return data.goals.reduce((total, goal) => {
-      const remaining = goal.targetAmount - (goal.currentAmount || 0);
+      const remaining = (goal.targetAmount || 0) - (goal.currentAmount || 0);
       return total + Math.max(0, remaining);
     }, 0);
   }

@@ -10,10 +10,10 @@ export const financeExtractionSchema = z.object({
   transactions: z
     .array(
       z.object({
-        type: z.enum(['income', 'expense', 'transfer']).describe('Transaction type'),
-        amount: z.number().describe('Transaction amount'),
+        type: z.enum(['income', 'expense', 'transfer']).nullable().optional().describe('Transaction type'),
+        amount: z.number().nullable().optional().describe('Transaction amount'),
         currency: z.string().default('USD').describe('Currency code'),
-        description: z.string().describe('What the transaction was for'),
+        description: z.string().nullable().optional().describe('What the transaction was for'),
         category: z.string().nullable().optional().describe('Category (food, transport, etc.)'),
         date: z.string().nullable().optional().describe('Transaction date'),
       })
@@ -30,8 +30,8 @@ export const financeExtractionSchema = z.object({
       categories: z
         .array(
           z.object({
-            name: z.string(),
-            amount: z.number(),
+            name: z.string().nullable().optional(),
+            amount: z.number().nullable().optional(),
             spent: z.number().nullable().optional(),
           })
         )
@@ -46,8 +46,8 @@ export const financeExtractionSchema = z.object({
   goals: z
     .array(
       z.object({
-        name: z.string().describe('Goal name'),
-        targetAmount: z.number().describe('Target amount to save'),
+        name: z.string().nullable().optional().describe('Goal name'),
+        targetAmount: z.number().nullable().optional().describe('Target amount to save'),
         currentAmount: z.number().nullable().optional().describe('Current progress'),
         deadline: z.string().nullable().optional().describe('Target date'),
         priority: z.enum(['low', 'medium', 'high']).nullable().optional(),
@@ -63,7 +63,7 @@ export const financeExtractionSchema = z.object({
       portfolio: z
         .array(
           z.object({
-            type: z.string().describe('Investment type (stocks, bonds, crypto, etc.)'),
+            type: z.string().nullable().optional().describe('Investment type (stocks, bonds, crypto, etc.)'),
             value: z.number().nullable().optional(),
             change: z.number().nullable().optional().describe('Recent change in value'),
           })
@@ -81,8 +81,8 @@ export const financeExtractionSchema = z.object({
   debt: z
     .array(
       z.object({
-        type: z.string().describe('Type of debt (credit card, loan, mortgage)'),
-        amount: z.number().describe('Total debt amount'),
+        type: z.string().nullable().optional().describe('Type of debt (credit card, loan, mortgage)'),
+        amount: z.number().nullable().optional().describe('Total debt amount'),
         interestRate: z.number().nullable().optional().describe('Interest rate percentage'),
         minimumPayment: z.number().nullable().optional(),
       })
@@ -95,8 +95,8 @@ export const financeExtractionSchema = z.object({
   concerns: z
     .array(
       z.object({
-        topic: z.string().describe('What the concern is about'),
-        severity: z.enum(['minor', 'moderate', 'major']).describe('How serious'),
+        topic: z.string().nullable().optional().describe('What the concern is about'),
+        severity: z.enum(['minor', 'moderate', 'major']).nullable().optional().describe('How serious'),
         details: z.string().nullable().optional(),
       })
     )
@@ -148,7 +148,7 @@ export function getFinancialHealthScore(data: FinanceData): 'healthy' | 'moderat
 
   // Check debt to income ratio
   if (data.income?.amount && data.debt?.length) {
-    const totalDebt = data.debt.reduce((sum, d) => sum + d.amount, 0);
+    const totalDebt = data.debt.reduce((sum, d) => sum + (d.amount || 0), 0);
     const annualIncome =
       data.income.frequency === 'yearly'
         ? data.income.amount

@@ -32,7 +32,7 @@ export class WellnessCheckStrategy extends BaseSteeringStrategy {
     // Also check if user mentioned feeling unwell recently
     const recentHealthConcern = state.extractions?.health?.some((e) => {
       const data = e.data as HealthData;
-      return data.symptoms?.length || (data.mood && data.mood.level <= 4);
+      return data.symptoms?.length || (data.mood && data.mood?.level || 5 <= 4);
     });
 
     return hoursSinceCheck || healthActive || recentHealthConcern || false;

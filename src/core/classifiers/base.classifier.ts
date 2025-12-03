@@ -70,8 +70,9 @@ export abstract class BaseClassifier<
       }
 
       const response = await llmService.generateResponse([], prompt, {
-        maxTokens: options.maxTokens ?? 300,
-        temperature: options.temperature ?? 0.3,
+        model: options.model ?? config.openai.classifierModel, // Use classifier-specific model
+        maxTokens: 500,
+        temperature: 0.1,
       });
 
       // Verbose logging of response

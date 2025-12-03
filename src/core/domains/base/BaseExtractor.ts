@@ -1,8 +1,8 @@
 // Base Extractor - Abstract class for domain-specific data extraction
 import { z } from 'zod';
-import OpenAI from 'openai';
 import { config } from '@/config/index.js';
 import { logger } from '@/core/logger.js';
+import { llmService } from '@/core/llm.service.js';
 import type { ExtractedData, ExtractionContext } from '../types.js';
 
 /**
@@ -12,15 +12,6 @@ import type { ExtractedData, ExtractionContext } from '../types.js';
 export abstract class BaseExtractor {
   abstract domainId: string;
   abstract schema: z.ZodSchema;
-
-  protected openai: OpenAI;
-
-  constructor() {
-    this.openai = new OpenAI({
-      apiKey: config.openai.apiKey,
-      timeout: config.openai.timeout,
-    });
-  }
 
   /**
    * Extract domain-specific data from a message
@@ -57,12 +48,9 @@ export abstract class BaseExtractor {
         );
       }
 
-      // Use OpenAI structured output
-      // Note: The parse method with Zod is not available in the current SDK version
-      // We'll use regular completions and parse the JSON manually
-      const completion = await this.openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
+      // Use llmService for structured output
+      const content = await llmService.generateFromMessages(
+        [
           {
             role: 'system',
             content:
@@ -73,22 +61,21 @@ export abstract class BaseExtractor {
             content: message,
           },
         ],
-        response_format: { type: 'json_object' },
-        temperature: 0.3, // Lower temperature for more consistent extraction
-        max_tokens: 500,
-      });
+        {
+          model: config.openai.extractorModel, // Use configured extractor model
+          responseFormat: { type: 'json_object' },
+          temperature: 0.1, // Lower temperature for more consistent extraction
+          maxTokens: 1000,
+        }
+      );
 
-      const content = completion.choices[0]?.message?.content;
-
-      // Verbose logging of raw response
+      // Verbose logging is handled by llmService, but add domain-specific log
       if (config.logging.llmVerbose) {
         logger.info(
           {
             type: 'EXTRACTOR_RAW_RESPONSE',
             domainId: this.domainId,
             response: content,
-            usage: completion.usage,
-            model: completion.model,
           },
           `EXTRACTOR VERBOSE [${this.domainId}]: Received raw response`
         );

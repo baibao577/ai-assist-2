@@ -76,6 +76,8 @@ export interface AppConfig {
   openai: {
     apiKey: string;
     model: string;
+    classifierModel: string; // Model for all classifiers
+    extractorModel: string; // Model for domain extractors
     maxTokens: number;
     temperature: number;
     timeout: number;

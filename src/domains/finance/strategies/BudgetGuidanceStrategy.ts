@@ -30,9 +30,9 @@ export class BudgetGuidanceStrategy extends BaseSteeringStrategy {
     // Check for overspending concerns
     const hasSpendingConcerns = financeData.concerns?.some(
       (c) =>
-        c.topic.toLowerCase().includes('spend') ||
-        c.topic.toLowerCase().includes('budget') ||
-        c.topic.toLowerCase().includes('expense')
+        (c.topic || "").toLowerCase().includes('spend') ||
+        (c.topic || "").toLowerCase().includes('budget') ||
+        (c.topic || "").toLowerCase().includes('expense')
     );
 
     return hasBudgetData || hasExpenses || hasSpendingConcerns || false;
@@ -78,7 +78,7 @@ export class BudgetGuidanceStrategy extends BaseSteeringStrategy {
       if (financeData.budget.categories && financeData.budget.categories.length > 0) {
         // Check which categories might be overspent
         const overspent = financeData.budget.categories.filter(
-          (c) => c.spent && c.spent > c.amount
+          (c) => c.spent && c.spent > (c.amount || 0)
         );
         if (overspent.length > 0) {
           suggestions.push(
@@ -103,8 +103,8 @@ export class BudgetGuidanceStrategy extends BaseSteeringStrategy {
       }
 
       // Large expenses
-      const avgAmount = expenses.reduce((sum, e) => sum + e.amount, 0) / expenses.length;
-      const largeExpenses = expenses.filter((e) => e.amount > avgAmount * 2);
+      const avgAmount = expenses.reduce((sum, e) => sum + (e.amount || 0), 0) / expenses.length;
+      const largeExpenses = expenses.filter((e) => (e.amount || 0) > avgAmount * 2);
       if (largeExpenses.length > 0) {
         suggestions.push(
           `That ${largeExpenses[0].description} was a significant expense. Was it planned?`
@@ -148,7 +148,9 @@ export class BudgetGuidanceStrategy extends BaseSteeringStrategy {
 
     if (data.budget?.categories) {
       for (const c of data.budget.categories) {
-        categories.add(c.name);
+        if (c.name) {
+          categories.add(c.name);
+        }
       }
     }
 

@@ -27,7 +27,7 @@ export class SymptomExplorationStrategy extends BaseSteeringStrategy {
     const hasSymptoms = healthData.symptoms && healthData.symptoms.length > 0;
 
     // Check for concerning mood (level 3 or below)
-    const hasConcerningMood = healthData.mood && healthData.mood.level <= 3;
+    const hasConcerningMood = healthData.mood && healthData.mood.level != null && healthData.mood.level <= 3;
 
     // Check for poor sleep
     const hasPoorSleep = healthData.sleep && healthData.sleep.quality === 'poor';
@@ -75,12 +75,12 @@ export class SymptomExplorationStrategy extends BaseSteeringStrategy {
         }
 
         // For severe symptoms (7+), suggest medical attention
-        if (symptom.severity >= 7) {
+        if (symptom.severity || 0 >= 7) {
           suggestions.push(
             `Have you considered seeing a healthcare provider about your ${symptom.name}?`
           );
           suggestions.push(`Is there anything that helps relieve your ${symptom.name}?`);
-        } else if (symptom.severity >= 5) {
+        } else if (symptom.severity || 0 >= 5) {
           // For moderate symptoms, ask about management
           suggestions.push(`What have you tried to manage your ${symptom.name}?`);
         }
@@ -94,14 +94,14 @@ export class SymptomExplorationStrategy extends BaseSteeringStrategy {
         suggestions.push(`Do you know what might have triggered your ${symptom.name}?`);
 
         // Ask about impact on daily life
-        if (symptom.severity >= 5) {
+        if (symptom.severity || 0 >= 5) {
           suggestions.push(`Is the ${symptom.name} affecting your daily activities?`);
         }
       }
     }
 
     // Explore concerning mood
-    if (healthData.mood && healthData.mood.level <= 3) {
+    if (healthData.mood && healthData.mood.level != null && healthData.mood.level <= 3) {
       if (!healthData.mood.triggers || healthData.mood.triggers.length === 0) {
         suggestions.push("Is there something specific that's troubling you?");
       }
