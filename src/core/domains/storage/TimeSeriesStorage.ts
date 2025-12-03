@@ -86,6 +86,55 @@ export class TimeSeriesStorage<T> implements DomainStorage<T> {
   }
 
   /**
+   * Load recent history for a conversation
+   * Used to provide historical context to AI
+   */
+  async loadHistory(
+    conversationId: string,
+    userId: string,
+    days: number = 7,
+    limit: number = 10
+  ): Promise<Array<{ data: T; confidence: number; extractedAt: Date }>> {
+    try {
+      const db = getDatabase();
+      // @ts-ignore - SQLite uses different types
+      const sqlite = db.session.client;
+
+      const cutoffTime = Math.floor((Date.now() - days * 24 * 60 * 60 * 1000) / 1000);
+
+      const query = `
+        SELECT data, confidence, extracted_at
+        FROM domain_data
+        WHERE domain_id = ?
+          AND conversation_id = ?
+          AND user_id = ?
+          AND extracted_at >= ?
+        ORDER BY extracted_at DESC
+        LIMIT ?
+      `;
+
+      const stmt = sqlite.prepare(query);
+      const results = stmt.all(this.domainId, conversationId, userId, cutoffTime, limit);
+
+      return results.map((row: any) => ({
+        data: typeof row.data === 'string' ? JSON.parse(row.data) : row.data,
+        confidence: row.confidence,
+        extractedAt: new Date(row.extracted_at * 1000),
+      }));
+    } catch (error) {
+      logger.error(
+        {
+          domainId: this.domainId,
+          conversationId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        'Failed to load domain history'
+      );
+      return [];
+    }
+  }
+
+  /**
    * Query stored data with filters
    */
   async query(filters: QueryFilters): Promise<T[]> {

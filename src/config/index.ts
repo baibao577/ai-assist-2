@@ -24,6 +24,14 @@ const envSchema = z.object({
     .string()
     .optional()
     .transform((val) => val === 'true'),
+  // Domain History Configuration
+  DOMAIN_HISTORY_ENABLED: z
+    .string()
+    .optional()
+    .default('true')
+    .transform((val) => val === 'true'),
+  DOMAIN_HISTORY_DAYS: z.string().default('7'),
+  DOMAIN_HISTORY_LIMIT: z.string().default('10'),
 });
 
 // Parse and validate environment variables
@@ -50,6 +58,11 @@ export const config: AppConfig = {
   },
   context: {
     messageLimit: parseInt(env.CONTEXT_MESSAGE_LIMIT, 10),
+  },
+  domainHistory: {
+    enabled: env.DOMAIN_HISTORY_ENABLED,
+    days: parseInt(env.DOMAIN_HISTORY_DAYS, 10),
+    limit: parseInt(env.DOMAIN_HISTORY_LIMIT, 10),
   },
 };
 

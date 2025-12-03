@@ -44,6 +44,13 @@ export interface ConversationState {
   domainContext?: {
     [domainId: string]: DomainContext;
   };
+  domainHistory?: {
+    [domainId: string]: Array<{
+      data: any;
+      confidence: number;
+      extractedAt: Date;
+    }>;
+  };
 
   // Additional context for pipeline
   messages?: Array<{

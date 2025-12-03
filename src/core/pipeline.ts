@@ -845,9 +845,85 @@ export class Pipeline {
         );
       }
 
+      // Load domain history if enabled
+      if (config.domainHistory.enabled) {
+        state = await this.loadDomainHistory(state, conversation.id, context.userId);
+      }
+
       return { conversation, messages, state };
     } catch (error) {
       throw new PipelineError('load', error as Error, context);
+    }
+  }
+
+  /**
+   * Load domain history from database
+   */
+  private async loadDomainHistory(
+    state: ConversationState,
+    conversationId: string,
+    userId: string
+  ): Promise<ConversationState> {
+    try {
+      const domainHistory: ConversationState['domainHistory'] = {};
+      const enabledDomains = domainRegistry.getActiveDomains();
+
+      // Load history for each enabled domain
+      for (const domain of enabledDomains) {
+        if (domain?.config.storageConfig) {
+          const storage = StorageFactory.create(domain.id, domain.config.storageConfig);
+
+          // Check if storage has loadHistory method (TimeSeriesStorage does)
+          if ('loadHistory' in storage && typeof storage.loadHistory === 'function') {
+            const history = await storage.loadHistory(
+              conversationId,
+              userId,
+              config.domainHistory.days,
+              config.domainHistory.limit
+            );
+
+            if (history.length > 0) {
+              domainHistory[domain.id] = history;
+              logger.debug(
+                {
+                  domainId: domain.id,
+                  entriesLoaded: history.length,
+                  oldestEntry: history[history.length - 1].extractedAt,
+                  newestEntry: history[0].extractedAt,
+                },
+                'Domain history loaded'
+              );
+            }
+          }
+        }
+      }
+
+      if (Object.keys(domainHistory).length > 0) {
+        logger.info(
+          {
+            conversationId,
+            domainsWithHistory: Object.keys(domainHistory),
+            totalEntries: Object.values(domainHistory).reduce((sum, h) => sum + h.length, 0),
+          },
+          'Load stage: Domain history loaded'
+        );
+
+        return {
+          ...state,
+          domainHistory,
+        };
+      }
+
+      return state;
+    } catch (error) {
+      logger.error(
+        {
+          conversationId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        'Failed to load domain history'
+      );
+      return state; // Continue without history on error
     }
   }
 

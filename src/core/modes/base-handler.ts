@@ -92,6 +92,13 @@ export abstract class BaseModeHandler implements IModeHandler {
       contextElements?: ContextElement[];
       steeringHints?: any;
       extractions?: any;
+      domainHistory?: {
+        [domainId: string]: Array<{
+          data: any;
+          confidence: number;
+          extractedAt: Date;
+        }>;
+      };
     };
     const elements: ContextElement[] = state?.contextElements || [];
 
@@ -263,6 +270,32 @@ This information was automatically extracted from the conversation. Use it to pr
       }
     }
 
+    // Add historical domain data if present
+    if (state?.domainHistory && Object.keys(state.domainHistory).length > 0) {
+      const historySummary: any = {};
+
+      for (const [domainId, history] of Object.entries(state.domainHistory)) {
+        if (Array.isArray(history) && history.length > 0) {
+          // Format history entries for each domain
+          historySummary[domainId] = history.slice(0, 5).map((entry) => ({
+            data: this.summarizeDomainData(domainId, entry.data),
+            daysAgo: Math.round((Date.now() - new Date(entry.extractedAt).getTime()) / (1000 * 60 * 60 * 24)),
+            confidence: entry.confidence,
+          }));
+        }
+      }
+
+      if (Object.keys(historySummary).length > 0) {
+        contextSections.push(`DOMAIN HISTORY (Recent Patterns):
+${JSON.stringify(historySummary, null, 2)}
+
+This historical data shows patterns over time. Use it to:
+- Track progress (e.g., "Your headaches seem less severe than last week")
+- Provide continuity (e.g., "You mentioned stress about money 3 days ago")
+- Offer personalized insights based on trends`);
+      }
+    }
+
     const contextSection = contextSections.join('\n\n');
 
     logger.debug(
@@ -277,6 +310,41 @@ This information was automatically extracted from the conversation. Use it to pr
     );
 
     return contextSection;
+  }
+
+  /**
+   * Summarize domain data to only include key information
+   */
+  private summarizeDomainData(domainId: string, data: any): any {
+    // Extract only key fields based on domain type
+    if (domainId === 'health') {
+      return {
+        symptoms: data.symptoms?.map((s: any) => ({
+          name: s.name,
+          severity: s.severity
+        })).filter(Boolean),
+        mood: data.mood ? {
+          emotion: data.mood.emotion,
+          level: data.mood.level
+        } : undefined,
+        sleep: data.sleep ? {
+          quality: data.sleep.quality,
+          hours: data.sleep.hours
+        } : undefined,
+      };
+    } else if (domainId === 'finance') {
+      return {
+        concerns: data.concerns,
+        transactions: data.transactions?.slice(0, 3), // Limit to recent 3
+        budget: data.budget?.total ? { total: data.budget.total } : undefined,
+      };
+    }
+
+    // For unknown domains, return minimal summary
+    return Object.keys(data).slice(0, 3).reduce((acc: any, key: string) => {
+      acc[key] = data[key];
+      return acc;
+    }, {});
   }
 
   /**

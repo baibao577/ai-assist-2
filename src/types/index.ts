@@ -93,6 +93,11 @@ export interface AppConfig {
   context: {
     messageLimit: number;
   };
+  domainHistory: {
+    enabled: boolean;
+    days: number;
+    limit: number;
+  };
 }
 
 // Error types
