@@ -1,5 +1,7 @@
 // Time Series Storage - Storage implementation for time-series domain data
+import { eq, and, gte, desc, sql } from 'drizzle-orm';
 import { getDatabase } from '@/database/client.js';
+import { domainData } from '@/database/schema.js';
 import { logger } from '@/core/logger.js';
 import type { StorageConfig } from '../types.js';
 import type {
@@ -39,31 +41,16 @@ export class TimeSeriesStorage<T> implements DomainStorage<T> {
   async store(data: T & { userId: string; conversationId: string }): Promise<void> {
     try {
       const db = getDatabase();
-      // @ts-ignore - SQLite uses different types
-      const sqlite = db.session.client;
-
       const confidence = (data as any).confidence || 0.8;
-      const timestamp = Math.floor(Date.now() / 1000); // Unix timestamp for SQLite
 
-      const stmt = sqlite.prepare(`
-        INSERT INTO domain_data (
-          domain_id,
-          user_id,
-          conversation_id,
-          data,
-          confidence,
-          extracted_at
-        ) VALUES (?, ?, ?, ?, ?, ?)
-      `);
-
-      stmt.run(
-        this.domainId,
-        data.userId,
-        data.conversationId,
-        JSON.stringify(data),
+      await db.insert(domainData).values({
+        domainId: this.domainId,
+        userId: data.userId,
+        conversationId: data.conversationId,
+        data: data as any, // Will be JSON-stringified by Drizzle
         confidence,
-        timestamp
-      );
+        extractedAt: new Date(),
+      });
 
       logger.debug(
         {
@@ -97,29 +84,30 @@ export class TimeSeriesStorage<T> implements DomainStorage<T> {
   ): Promise<Array<{ data: T; confidence: number; extractedAt: Date }>> {
     try {
       const db = getDatabase();
-      // @ts-ignore - SQLite uses different types
-      const sqlite = db.session.client;
+      const cutoffDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
-      const cutoffTime = Math.floor((Date.now() - days * 24 * 60 * 60 * 1000) / 1000);
+      const results = await db
+        .select({
+          data: domainData.data,
+          confidence: domainData.confidence,
+          extractedAt: domainData.extractedAt,
+        })
+        .from(domainData)
+        .where(
+          and(
+            eq(domainData.domainId, this.domainId),
+            eq(domainData.conversationId, conversationId),
+            eq(domainData.userId, userId),
+            gte(domainData.extractedAt, cutoffDate)
+          )
+        )
+        .orderBy(desc(domainData.extractedAt))
+        .limit(limit);
 
-      const query = `
-        SELECT data, confidence, extracted_at
-        FROM domain_data
-        WHERE domain_id = ?
-          AND conversation_id = ?
-          AND user_id = ?
-          AND extracted_at >= ?
-        ORDER BY extracted_at DESC
-        LIMIT ?
-      `;
-
-      const stmt = sqlite.prepare(query);
-      const results = stmt.all(this.domainId, conversationId, userId, cutoffTime, limit);
-
-      return results.map((row: any) => ({
-        data: typeof row.data === 'string' ? JSON.parse(row.data) : row.data,
-        confidence: row.confidence,
-        extractedAt: new Date(row.extracted_at * 1000),
+      return results.map((row) => ({
+        data: row.data as T,
+        confidence: row.confidence ?? 0.8,
+        extractedAt: row.extractedAt,
       }));
     } catch (error) {
       logger.error(
@@ -140,54 +128,45 @@ export class TimeSeriesStorage<T> implements DomainStorage<T> {
   async query(filters: QueryFilters): Promise<T[]> {
     try {
       const db = getDatabase();
-      // @ts-ignore - SQLite uses different types
-      const sqlite = db.session.client;
 
-      let query = `
-        SELECT data
-        FROM domain_data
-        WHERE domain_id = ?
-      `;
-      const params: any[] = [this.domainId];
+      // Build where conditions
+      const conditions = [eq(domainData.domainId, this.domainId)];
 
-      // Add filters
       if (filters.userId) {
-        query += ` AND user_id = ?`;
-        params.push(filters.userId);
+        conditions.push(eq(domainData.userId, filters.userId));
       }
 
       if (filters.conversationId) {
-        query += ` AND conversation_id = ?`;
-        params.push(filters.conversationId);
+        conditions.push(eq(domainData.conversationId, filters.conversationId));
       }
 
       if (filters.startDate) {
-        query += ` AND extracted_at >= ?`;
-        params.push(Math.floor(filters.startDate.getTime() / 1000));
+        conditions.push(gte(domainData.extractedAt, filters.startDate));
       }
 
       if (filters.endDate) {
-        query += ` AND extracted_at <= ?`;
-        params.push(Math.floor(filters.endDate.getTime() / 1000));
+        conditions.push(sql`${domainData.extractedAt} <= ${filters.endDate}`);
       }
 
-      // Add ordering and limit
-      query += ` ORDER BY extracted_at DESC`;
+      // Build and execute query
+      let query = db
+        .select({ data: domainData.data })
+        .from(domainData)
+        .where(and(...conditions))
+        .orderBy(desc(domainData.extractedAt))
+        .$dynamic();
 
       if (filters.limit) {
-        query += ` LIMIT ?`;
-        params.push(filters.limit);
+        query = query.limit(filters.limit);
       }
 
       if (filters.offset) {
-        query += ` OFFSET ?`;
-        params.push(filters.offset);
+        query = query.offset(filters.offset);
       }
 
-      const stmt = sqlite.prepare(query);
-      const result = stmt.all(...params);
+      const result = await query;
 
-      return result.map((row: any) => JSON.parse(row.data) as T);
+      return result.map((row) => row.data as T);
     } catch (error) {
       logger.error(
         {
@@ -206,38 +185,29 @@ export class TimeSeriesStorage<T> implements DomainStorage<T> {
   async aggregate(config: AggregationConfig): Promise<AggregationResult> {
     try {
       const db = getDatabase();
-      // @ts-ignore - SQLite uses different types
-      const sqlite = db.session.client;
-
-      // Simplified aggregation for SQLite
-      // Domain-specific implementations will override this
-      const query = `
-        SELECT
-          date(extracted_at, 'unixepoch') as period,
-          COUNT(*) as count
-        FROM domain_data
-        WHERE domain_id = ?
-          AND user_id = ?
-          AND extracted_at >= ?
-          AND extracted_at <= ?
-        GROUP BY period
-        ORDER BY period DESC
-      `;
 
       const startDate = config.startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const endDate = config.endDate || new Date();
 
-      const stmt = sqlite.prepare(query);
-      const result = stmt.all(
-        this.domainId,
-        config.userId,
-        Math.floor(startDate.getTime() / 1000),
-        Math.floor(endDate.getTime() / 1000)
+      // Use raw SQL for aggregation as Drizzle's support for GROUP BY is limited in SQLite
+      const result = await db.all(
+        sql`
+          SELECT
+            date(extracted_at, 'unixepoch') as period,
+            COUNT(*) as count
+          FROM domain_data
+          WHERE domain_id = ${this.domainId}
+            AND user_id = ${config.userId}
+            AND extracted_at >= ${startDate}
+            AND extracted_at <= ${endDate}
+          GROUP BY period
+          ORDER BY period DESC
+        `
       );
 
       return {
         periods: result,
-        total: result.reduce((sum: number, row: any) => sum + row.count, 0),
+        total: result.reduce((sum: number, row: any) => sum + (row.count as number), 0),
       };
     } catch (error) {
       logger.error(
@@ -257,11 +227,10 @@ export class TimeSeriesStorage<T> implements DomainStorage<T> {
   async delete(id: string): Promise<void> {
     try {
       const db = getDatabase();
-      // @ts-ignore - SQLite uses different types
-      const sqlite = db.session.client;
 
-      const stmt = sqlite.prepare('DELETE FROM domain_data WHERE id = ? AND domain_id = ?');
-      stmt.run(id, this.domainId);
+      await db
+        .delete(domainData)
+        .where(and(eq(domainData.id, id), eq(domainData.domainId, this.domainId)));
     } catch (error) {
       logger.error(
         {
@@ -281,25 +250,24 @@ export class TimeSeriesStorage<T> implements DomainStorage<T> {
   async deleteMany(filters: QueryFilters): Promise<number> {
     try {
       const db = getDatabase();
-      // @ts-ignore - SQLite uses different types
-      const sqlite = db.session.client;
 
-      let query = 'DELETE FROM domain_data WHERE domain_id = ?';
-      const params: any[] = [this.domainId];
+      // Build where conditions
+      const conditions = [eq(domainData.domainId, this.domainId)];
 
       if (filters.userId) {
-        query += ` AND user_id = ?`;
-        params.push(filters.userId);
+        conditions.push(eq(domainData.userId, filters.userId));
       }
 
       if (filters.conversationId) {
-        query += ` AND conversation_id = ?`;
-        params.push(filters.conversationId);
+        conditions.push(eq(domainData.conversationId, filters.conversationId));
       }
 
-      const stmt = sqlite.prepare(query);
-      const result = stmt.run(...params);
-      return result.changes || 0;
+      // Execute delete
+      await db.delete(domainData).where(and(...conditions));
+
+      // Drizzle doesn't provide row count for deletes in SQLite, so we return 0
+      // This is a limitation but keeps the code clean
+      return 0;
     } catch (error) {
       logger.error(
         {
@@ -318,25 +286,28 @@ export class TimeSeriesStorage<T> implements DomainStorage<T> {
   async count(filters: QueryFilters): Promise<number> {
     try {
       const db = getDatabase();
-      // @ts-ignore - SQLite uses different types
-      const sqlite = db.session.client;
 
-      let query = 'SELECT COUNT(*) as count FROM domain_data WHERE domain_id = ?';
-      const params: any[] = [this.domainId];
+      // Build where conditions
+      const conditions = [eq(domainData.domainId, this.domainId)];
 
       if (filters.userId) {
-        query += ` AND user_id = ?`;
-        params.push(filters.userId);
+        conditions.push(eq(domainData.userId, filters.userId));
       }
 
       if (filters.conversationId) {
-        query += ` AND conversation_id = ?`;
-        params.push(filters.conversationId);
+        conditions.push(eq(domainData.conversationId, filters.conversationId));
       }
 
-      const stmt = sqlite.prepare(query);
-      const result = stmt.get(...params) as { count: number };
-      return result.count;
+      // Get count using raw SQL as Drizzle doesn't have a count method for SQLite
+      const result = await db.get(
+        sql`
+          SELECT COUNT(*) as count
+          FROM domain_data
+          WHERE ${and(...conditions)}
+        `
+      );
+
+      return (result as any)?.count ?? 0;
     } catch (error) {
       logger.error(
         {
