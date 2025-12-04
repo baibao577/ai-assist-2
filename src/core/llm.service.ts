@@ -250,6 +250,7 @@ export class LLMService {
           maxTokens: completionRequest.max_tokens,
           temperature: completionRequest.temperature,
           hasResponseFormat: !!completionRequest.response_format,
+          method: 'generateFromMessages', // For performance report identification
         });
 
         const apiCallStart = Date.now();
