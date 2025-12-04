@@ -59,6 +59,7 @@ import { logger } from '@/core/logger.js';
 import { multiIntentClassifier, responseOrchestrator } from '@/core/orchestrator/index.js'; // MVP v3
 import { pipelineDomainService } from './pipeline-domain.service.js';
 import { pipelineCoreService } from './pipeline-core.service.js';
+import { performanceTracker } from './performance-tracker.js';
 import {
   PipelineError,
   MessageRole,
@@ -104,12 +105,20 @@ export class Pipeline {
   async execute(context: PipelineContext): Promise<PipelineResult> {
     const startTime = Date.now();
 
+    // Start root performance span
+    performanceTracker.reset(); // Clear any previous tracking
+    const rootSpan = performanceTracker.startSpan('pipeline.execute');
+
     try {
       // Stage 1: Load conversation, messages, and state
+      const loadSpan = performanceTracker.startSpan('stage.load', rootSpan);
       const { conversation, messages, state } = await pipelineCoreService.loadStage(context);
+      performanceTracker.endSpan(loadSpan);
 
       // Stage 2: Apply decay to state
+      const decaySpan = performanceTracker.startSpan('stage.decay', rootSpan);
       const decayedState = decayStage.applyDecay(state);
+      performanceTracker.endSpan(decaySpan);
 
       logger.debug(
         {
@@ -129,13 +138,17 @@ export class Pipeline {
       );
 
       // Stage 3: Classification (Sequential: Safety → Intent → Arbiter)
+      const classificationSpan = performanceTracker.startSpan('stage.classification', rootSpan);
       const { decision, safetyResult, intentResult } = await this.classificationStage(
         context,
         messages,
-        decayedState
+        decayedState,
+        classificationSpan
       );
+      performanceTracker.endSpan(classificationSpan);
 
       // Stage 4: Parallel Enrichment (Global + Domain Classification + Extraction + Steering)
+      const enrichmentSpan = performanceTracker.startSpan('stage.enrichment', rootSpan);
       const enrichedState = await this.parallelEnrichmentStage(
         context,
         messages,
@@ -143,14 +156,18 @@ export class Pipeline {
         { decision, safetyResult, intentResult },
         conversation.id
       );
+      performanceTracker.endSpan(enrichmentSpan);
 
       // Stage 5: Handle message - check for multi-intent and orchestrate if needed
+      const handlerSpan = performanceTracker.startSpan('stage.handler', rootSpan);
 
       // Check for multi-intent after enrichment
+      const multiIntentSpan = performanceTracker.startSpan('multi_intent.classify', handlerSpan);
       const multiIntentResult = await multiIntentClassifier.classify(
         context.message,
         enrichedState
       );
+      performanceTracker.endSpan(multiIntentSpan);
 
       let handlerResult: { response: string; stateUpdates?: any };
 
@@ -178,11 +195,13 @@ export class Pipeline {
           state: enrichedState as any, // ConversationState to Record<string, unknown>
         };
 
+        const orchestrateSpan = performanceTracker.startSpan('handler.orchestrate', handlerSpan);
         const orchestratedResponse = await responseOrchestrator.orchestrate(
           handlerContext,
           this.modeHandlers,
           multiIntentResult
         );
+        performanceTracker.endSpan(orchestrateSpan);
 
         handlerResult = {
           response: orchestratedResponse.response,
@@ -229,6 +248,7 @@ export class Pipeline {
           entities: intentResult.entities || [],
         };
 
+        const singleHandlerSpan = performanceTracker.startSpan('handler.single', handlerSpan);
         handlerResult = await handler.handle({
           conversationId: conversation.id,
           userId: context.userId,
@@ -238,9 +258,12 @@ export class Pipeline {
           state: enrichedState as any, // Use fully enriched state
           classification: classificationContext,
         });
+        performanceTracker.endSpan(singleHandlerSpan);
       }
+      performanceTracker.endSpan(handlerSpan);
 
       // Stage 6: Save messages and updated state
+      const saveSpan = performanceTracker.startSpan('stage.save', rootSpan);
       const messageId = await pipelineCoreService.saveStage(
         conversation.id,
         context.message,
@@ -248,8 +271,23 @@ export class Pipeline {
         enrichedState,
         decision.finalMode
       );
+      performanceTracker.endSpan(saveSpan);
 
+      // End root span and get performance report
+      performanceTracker.endSpan(rootSpan);
       const processingTime = Date.now() - startTime;
+
+      // Log performance report if enabled
+      if (performanceTracker.isEnabled()) {
+        const perfReport = performanceTracker.formatReportAsText();
+        logger.info(
+          {
+            performanceReport: perfReport,
+            totalDuration: processingTime,
+          },
+          'Pipeline performance report'
+        );
+      }
 
       return {
         response: handlerResult.response,
@@ -258,6 +296,7 @@ export class Pipeline {
         conversationId: conversation.id,
       };
     } catch (error) {
+      performanceTracker.endSpan(rootSpan);
       throw new PipelineError('pipeline', error as Error, context);
     }
   }
@@ -273,7 +312,8 @@ export class Pipeline {
   private async classificationStage(
     context: PipelineContext,
     messages: Message[],
-    state: ConversationState
+    state: ConversationState,
+    _parentSpan?: string
   ): Promise<{
     decision: ArbiterDecision;
     safetyResult: SafetyResult;
