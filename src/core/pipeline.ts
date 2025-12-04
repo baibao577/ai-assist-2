@@ -279,14 +279,8 @@ export class Pipeline {
 
       // Log performance report if enabled
       if (performanceTracker.isEnabled()) {
-        const perfReport = performanceTracker.formatReportAsText();
-        logger.info(
-          {
-            performanceReport: perfReport,
-            totalDuration: processingTime,
-          },
-          'Pipeline performance report'
-        );
+        // Log to dedicated performance.log file and optionally to console
+        performanceTracker.logReport();
       }
 
       return {

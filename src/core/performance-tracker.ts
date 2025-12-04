@@ -6,6 +6,10 @@
  */
 
 import { logger } from './logger.js';
+import pino from 'pino';
+import fs from 'fs';
+import path from 'path';
+import chalk from 'chalk';
 
 // ============================================================================
 // Types
@@ -62,9 +66,31 @@ export class PerformanceTracker {
   private spanCounter = 0;
   private rootSpanId?: string;
   private enabled: boolean;
+  private perfLogger: pino.Logger;
 
   constructor(enabled = true) {
     this.enabled = enabled;
+
+    // Create a separate logger for performance metrics
+    const logsDir = path.join(process.cwd(), 'logs');
+    if (!fs.existsSync(logsDir)) {
+      fs.mkdirSync(logsDir, { recursive: true });
+    }
+
+    this.perfLogger = pino({
+      level: 'info',
+      transport: {
+        targets: [
+          {
+            target: 'pino/file',
+            options: {
+              destination: path.join(logsDir, 'performance.log'),
+              mkdir: true,
+            },
+          },
+        ],
+      },
+    });
   }
 
   /**
@@ -332,6 +358,53 @@ export class PerformanceTracker {
 
     // Return top 5 bottlenecks
     return bottlenecks.slice(0, 5);
+  }
+
+  /**
+   * Log performance report to dedicated performance.log file
+   */
+  logReport(): void {
+    if (!this.enabled) return;
+
+    const report = this.getReport();
+    const textReport = this.formatReportAsText();
+
+    // Log structured report to performance.log
+    this.perfLogger.info({
+      type: 'PERFORMANCE_REPORT',
+      totalDuration: report.totalDuration,
+      bottlenecks: report.bottlenecks,
+      breakdown: report.breakdown,
+      metrics: Object.fromEntries(
+        Array.from(this.metrics.entries()).map(([key, values]) => [
+          key,
+          {
+            count: values.length,
+            avg: values.reduce((sum, m) => sum + m.value, 0) / values.length,
+            min: Math.min(...values.map(m => m.value)),
+            max: Math.max(...values.map(m => m.value)),
+          },
+        ])
+      ),
+    });
+
+    // Also log human-readable report
+    this.perfLogger.info({
+      type: 'PERFORMANCE_REPORT_TEXT',
+      report: textReport,
+    });
+
+    // Print to console if enabled
+    if (process.env.PERF_CONSOLE === 'true') {
+      // Use chalk for colored output in development
+      if (process.env.NODE_ENV === 'development') {
+        console.log('\n' + chalk.cyan('═'.repeat(50)));
+        console.log(chalk.yellow(textReport));
+        console.log(chalk.cyan('═'.repeat(50)) + '\n');
+      } else {
+        console.log('\n' + textReport);
+      }
+    }
   }
 
   /**
