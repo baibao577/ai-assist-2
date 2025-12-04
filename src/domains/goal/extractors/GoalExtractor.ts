@@ -271,12 +271,26 @@ ${goalContext.activeGoals
     : ''
 }
 
-Determine the action type:
-- set_goal: User wants to create/set a new goal (e.g., "I want to read 12 books", "My goal is to exercise more")
+Determine the action type CAREFULLY:
+
+- set_goal: User EXPLICITLY wants to CREATE a NEW goal. Look for phrases like:
+  * "Set a goal to...", "Create a goal...", "I want to set a goal..."
+  * "My goal is..." (when clearly stating a new goal)
+  * Direct statements like "I want to read 12 books this year" (without asking questions)
+
 - log_progress: User is reporting progress on a goal (e.g., "I finished 3 books", "I exercised 30 minutes")
+
 - view_goals: User wants to see their goals (e.g., "Show my goals", "What are my goals?")
-- check_progress: User wants analytics/trends (e.g., "How am I doing?", "Check my progress")
-- update_goal: User wants to modify a goal (e.g., "Change my reading goal to 15 books")
+
+- check_progress: User wants analytics/trends OR asking about tracking (e.g., "How am I doing?", "Check my progress", "How can I track...")
+
+- update_goal: User wants to modify an existing goal (e.g., "Change my reading goal to 15 books")
+
+IMPORTANT RULES:
+1. If the user is ASKING A QUESTION about goals/tracking (contains "?", "how", "can you help", "explain"), DO NOT create a goal
+2. If the user mentions wanting to track something but asks for help/explanation, return check_progress or null
+3. Only use set_goal when the user clearly intends to CREATE a goal right now
+4. When in doubt, prefer check_progress or null over set_goal
 
 Extract relevant details:
 - For set_goal: goalTitle (required), targetValue, progressUnit, goalCategory, targetDate
@@ -285,11 +299,12 @@ Extract relevant details:
 - For check_progress: goalId (if specific goal mentioned)
 - For update_goal: goalId, new values
 
-IMPORTANT: If the message IS related to goals/progress, you MUST return a valid JSON with an action field.
 If the message is NOT related to goals/progress, return: {"action": null, "confidence": 0}
 
 Examples:
-- "I want to read 12 books this year" → {"action": "set_goal", "goalTitle": "Read 12 books this year", "targetValue": 12, "progressUnit": "books", "confidence": 0.95}
+- "I want to set a goal to read 12 books this year" → {"action": "set_goal", "goalTitle": "Read 12 books this year", "targetValue": 12, "progressUnit": "books", "confidence": 0.95}
+- "I want to track my goal of reading 20 books, how does it work?" → {"action": "check_progress", "confidence": 0.7} (asking about tracking, not setting)
+- "Can you help me track my reading progress?" → {"action": null, "confidence": 0} (just asking for help)
 - "I finished reading 3 books" → {"action": "log_progress", "progressValue": 3, "progressUnit": "books", "confidence": 0.9}
 - "Show me my goals" → {"action": "view_goals", "confidence": 0.95}
 

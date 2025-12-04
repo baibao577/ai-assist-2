@@ -193,3 +193,45 @@ Background Context: topic: time management
 - **Finance Extraction:**
   - budget: {categories: [{name: "health/gym", amount: 200}]}
 - **Cross-reference:** Both domains active, AI can connect fitness goals with budget
+
+---
+
+## Orchestrator Testing Plan
+
+### 1. Test Dialogue Categories
+
+### Category A: Greeting + Action (Most Common Multi-Intent)
+
+**Examples to test:**
+
+- "Hi! Can you help me track my reading progress?"
+  - Triggers: SMALLTALK + TRACK_PROGRESS
+  - Expected: Greeting first, then progress tracking
+- "Hello, I need some advice on managing my time better"
+  - Triggers: SMALLTALK + CONSULT
+  - Expected: Greeting followed by consultation
+- "Good morning! What can you do to help me?"
+  - Triggers: SMALLTALK + META
+  - Expected: Greeting with system capabilities
+
+### Category B: Progress + Advice (Domain Blending)
+
+**Examples to test:**
+
+- "I'm struggling with my reading goal, any tips?"
+  - Triggers: TRACK_PROGRESS + CONSULT
+  - Expected: Check current progress, then provide advice
+- "How am I doing with my goals and what should I focus on?"
+  - Triggers: TRACK_PROGRESS + CONSULT
+  - Expected: Analytics followed by recommendations
+
+### Category C: Triple Intent (Complex Orchestration)
+
+**Examples to test:**
+
+- "Hi! I want to check my progress and get advice on improving"
+  - Triggers: SMALLTALK + TRACK_PROGRESS + CONSULT
+  - Expected: Greeting → Progress report → Advice
+- "Good morning! Can you explain how goal tracking works and show me my current goals?"
+  - Triggers: SMALLTALK + META + TRACK_PROGRESS
+  - Expected: Greeting → System explanation → Goal display
