@@ -14,7 +14,7 @@ import { llmService } from '@/core/llm.service.js';
 export class ResponseOrchestrator {
   private readonly config = {
     maxModesPerResponse: 3,
-    handlerTimeout: 5000,
+    handlerTimeout: 15000, // Increased to 15s to allow for LLM response time
     parallelExecution: true,
   };
 
