@@ -7,7 +7,6 @@ import {
   type HandlerResult,
 } from '@/types/index.js';
 import { buildCrisisResponse, TONE_GUIDELINES } from '@/core/classifiers/index.js';
-import { logger } from '@/core/logger.js';
 
 export class ConsultModeHandler extends BaseModeHandler {
   readonly mode = ConversationMode.CONSULT;
@@ -69,72 +68,6 @@ ${toneGuideline.instructions}
     }
 
     return basePrompt;
-  }
-
-  /**
-   * Generate a segment for the orchestrator
-   * This method is called when multiple modes need to cooperate
-   */
-  async generateSegment(context: HandlerContext): Promise<any> {
-    try {
-      logger.debug(
-        { mode: this.mode, userId: context.userId },
-        'ConsultHandler: Generating segment for orchestrator'
-      );
-
-      // Get the handler result
-      const result = await this.handle(context);
-
-      // Critical: Check for empty response
-      if (!result.response || result.response.trim() === '') {
-        logger.warn('Consult handler returned empty response');
-        return null;
-      }
-
-      // Return segment in the expected format
-      return {
-        mode: ConversationMode.CONSULT,
-        content: result.response,
-        priority: 85, // Higher priority for advice/problem-solving content
-        standalone: false, // Can be combined with other modes
-        contentType: this.inferContentType(result.response),
-        metadata: {
-          confidence: 0.85, // Default confidence
-          stateUpdates: result.stateUpdates,
-        },
-      };
-    } catch (error) {
-      logger.error({ error, mode: this.mode }, 'Failed to generate consult segment');
-      return null;
-    }
-  }
-
-  /**
-   * Infer the content type based on the response
-   */
-  private inferContentType(response: string): string {
-    const lowerResponse = response.toLowerCase();
-
-    if (response.includes('?')) {
-      return 'question';
-    } else if (
-      lowerResponse.includes('should') ||
-      lowerResponse.includes('recommend') ||
-      lowerResponse.includes('suggest') ||
-      lowerResponse.includes('try') ||
-      lowerResponse.includes('consider')
-    ) {
-      return 'advice';
-    } else if (
-      lowerResponse.includes('understand') ||
-      lowerResponse.includes('hear you') ||
-      lowerResponse.includes('must be') ||
-      lowerResponse.includes('sorry to hear')
-    ) {
-      return 'acknowledgment';
-    } else {
-      return 'information';
-    }
   }
 }
 

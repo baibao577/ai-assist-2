@@ -226,9 +226,11 @@ Determine the action type CAREFULLY:
 
 IMPORTANT RULES:
 1. If the user is ASKING A QUESTION about goals/tracking (contains "?", "how", "can you help", "explain"), DO NOT create a goal
-2. If the user mentions wanting to track something but asks for help/explanation, return check_progress or null
-3. Only use set_goal when the user clearly intends to CREATE a goal right now
-4. When in doubt, prefer check_progress or null over set_goal
+2. If the user asks "Should I..." or "Would it..." or "Is it good to..." → They are seeking ADVICE, not taking action - return null
+3. Questions like "Should I set a goal?" are asking for advice about goal-setting, not actually setting a goal - return null
+4. If the user mentions wanting to track something but asks for help/explanation, return check_progress or null
+5. Only use set_goal when the user clearly intends to CREATE a goal RIGHT NOW
+6. When in doubt, prefer null over any action - only extract when action intent is clear
 
 Extract relevant details:
 - For set_goal: goalTitle (required), targetValue, progressUnit, goalCategory, targetDate
@@ -243,6 +245,8 @@ Examples:
 - "I want to set a goal to read 12 books this year" → {"action": "set_goal", "goalTitle": "Read 12 books this year", "targetValue": 12, "progressUnit": "books", "confidence": 0.95}
 - "I want to track my goal of reading 20 books, how does it work?" → {"action": "check_progress", "confidence": 0.7} (asking about tracking, not setting)
 - "Can you help me track my reading progress?" → {"action": null, "confidence": 0} (just asking for help)
+- "Should I set a goal for sleep?" → {"action": null, "confidence": 0} (asking for advice, not taking action)
+- "Would it help to set a goal?" → {"action": null, "confidence": 0} (seeking advice, not setting goal)
 - "I finished reading 3 books" → {"action": "log_progress", "progressValue": 3, "progressUnit": "books", "confidence": 0.9}
 - "Show me my goals" → {"action": "view_goals", "confidence": 0.95}
 
