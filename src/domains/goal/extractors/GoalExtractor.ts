@@ -232,11 +232,19 @@ If unsure or the message seems unrelated to goal selection, return {"isSelection
       const parsed = JSON.parse(content);
 
       // Don't extract if action is null or confidence is too low
-      if (!parsed || !parsed.action || parsed.confidence < 0.3) return null;
+      if (!parsed || !parsed.action || parsed.confidence < 0.3) {
+        logger.debug({ parsed, message }, 'No goal action detected or low confidence');
+        return null;
+      }
 
       return parsed as GoalData;
     } catch (error) {
-      logger.error({ error, message }, 'Failed to extract goal data using LLM');
+      // More detailed error logging
+      if (error instanceof SyntaxError) {
+        logger.error({ error, message }, 'Failed to parse JSON from LLM response');
+      } else {
+        logger.error({ error, message }, 'Failed to extract goal data using LLM');
+      }
       return null;
     }
   }

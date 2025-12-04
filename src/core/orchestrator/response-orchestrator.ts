@@ -62,30 +62,28 @@ export class ResponseOrchestrator {
    */
   async orchestrate(
     context: HandlerContext,
-    handlers: Map<ConversationMode, IModeHandler>
+    handlers: Map<ConversationMode, IModeHandler>,
+    multiIntent: MultiIntentResult
   ): Promise<OrchestratedResponse> {
     const startTime = Date.now();
 
     try {
-      // Step 1: Classify intents
-      const multiIntent = await this.classifyIntents(context);
-
-      // Step 2: Determine if orchestration is needed
+      // Step 1: Determine if orchestration is needed
       if (!multiIntent.requiresOrchestration) {
         // Single mode - use primary handler directly
         return this.handleSingleMode(context, handlers, multiIntent.primary.mode);
       }
 
-      // Step 3: Get recommended mode combination
+      // Step 2: Get recommended mode combination
       const selectedModes = this.selectModes(multiIntent);
 
-      // Step 4: Generate segments from selected modes
+      // Step 3: Generate segments from selected modes
       const segments = await this.generateSegments(context, handlers, selectedModes);
 
-      // Step 5: Compose final response (now async)
+      // Step 4: Compose final response (now async)
       const composedResponse = await this.composer.compose(segments);
 
-      // Step 6: Build orchestrated response
+      // Step 5: Build orchestrated response
       return {
         response: composedResponse,
         segments,
@@ -105,23 +103,6 @@ export class ResponseOrchestrator {
       // Fallback to primary mode
       return this.handleSingleMode(context, handlers, ConversationMode.CONSULT);
     }
-  }
-
-  /**
-   * Classify message intents
-   */
-  private async classifyIntents(context: HandlerContext): Promise<MultiIntentResult> {
-    // Convert HandlerContext state to ConversationState for classifier
-    const state = {
-      id: context.conversationId,
-      conversationId: context.conversationId,
-      mode: context.currentMode,
-      contextElements: (context.state as any).contextElements || [],
-      goals: (context.state as any).goals || [],
-      messages: context.messages || [],
-      metadata: (context.state as any).metadata || {},
-    };
-    return multiIntentClassifier.classify(context.message, state as any);
   }
 
   /**

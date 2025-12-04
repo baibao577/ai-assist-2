@@ -177,7 +177,8 @@ export class Pipeline {
 
         const orchestratedResponse = await responseOrchestrator.orchestrate(
           handlerContext,
-          this.modeHandlers
+          this.modeHandlers,
+          multiIntentResult
         );
 
         handlerResult = {
