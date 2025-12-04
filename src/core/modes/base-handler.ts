@@ -1,16 +1,29 @@
 // Base Mode Handler - Abstract class for all mode handlers
 import { llmService } from '@/core/llm.service.js';
 import { logger } from '@/core/logger.js';
-import type {
-  IModeHandler,
-  ConversationMode,
-  HandlerContext,
-  HandlerResult,
-  ContextElement,
-} from '@/types/index.js';
+import { ConversationMode } from '@/types/modes.js';
+import type { IModeHandler, HandlerContext, HandlerResult, ContextElement } from '@/types/index.js';
+
+/**
+ * Response length limits by mode (in tokens)
+ * Performance optimization: Shorter responses = faster generation
+ */
+const MODE_TOKEN_LIMITS: Record<ConversationMode, number> = {
+  [ConversationMode.SMALLTALK]: 150, // Brief, conversational
+  [ConversationMode.CONSULT]: 400, // Detailed advice
+  [ConversationMode.META]: 250, // Feature explanations
+  [ConversationMode.TRACK_PROGRESS]: 300, // Goal tracking responses
+};
 
 export abstract class BaseModeHandler implements IModeHandler {
   abstract readonly mode: ConversationMode;
+
+  /**
+   * Get the token limit for this handler's mode
+   */
+  protected getMaxTokens(): number {
+    return MODE_TOKEN_LIMITS[this.mode] || 300;
+  }
 
   /**
    * Handle the message in this mode
@@ -55,7 +68,7 @@ export abstract class BaseModeHandler implements IModeHandler {
   }
 
   /**
-   * Generate LLM response with mode-specific system prompt
+   * Generate LLM response with mode-specific system prompt and token limits
    */
   protected async generateResponse(systemPrompt: string, context: HandlerContext): Promise<string> {
     // Build context section from state
@@ -64,19 +77,24 @@ export abstract class BaseModeHandler implements IModeHandler {
     // Inject context BEFORE mode-specific system prompt
     const fullSystemPrompt = contextSection ? `${contextSection}\n\n${systemPrompt}` : systemPrompt;
 
+    // Get mode-specific token limit for faster responses
+    const maxTokens = this.getMaxTokens();
+
     logger.debug(
       {
         mode: this.mode,
         hasContext: !!contextSection,
         contextLength: contextSection?.length || 0,
         systemPromptLength: fullSystemPrompt.length,
+        maxTokens,
       },
       'Base handler: Generating response with system prompt'
     );
 
-    // Generate response with context in system prompt
+    // Generate response with context in system prompt and token limit
     const response = await llmService.generateResponse(context.messages as any, context.message, {
       systemPrompt: fullSystemPrompt,
+      maxTokens, // Performance optimization: limit response length
     });
 
     return response;

@@ -50,19 +50,22 @@
 
 import { decayStage } from '@/core/stages/decay.stage.js';
 import { globalStage } from '@/core/stages/global.stage.js';
-import { safetyClassifier, intentClassifier, arbiter } from '@/core/classifiers/index.js';
+import {
+  unifiedClassifier,
+  arbiter,
+  type UnifiedClassificationResult,
+} from '@/core/classifiers/index.js';
 import { consultHandler } from '@/core/modes/consult.handler.js';
 import { smalltalkHandler } from '@/core/modes/smalltalk.handler.js';
 import { metaHandler } from '@/core/modes/meta.handler.js';
 import { trackProgressHandler } from '@/core/modes/track-progress.handler.js'; // MVP v4
 import { logger } from '@/core/logger.js';
-import { multiIntentClassifier, responseOrchestrator } from '@/core/orchestrator/index.js'; // MVP v3
+import { responseOrchestrator } from '@/core/orchestrator/index.js'; // MVP v3
 import { pipelineDomainService } from './pipeline-domain.service.js';
 import { pipelineCoreService } from './pipeline-core.service.js';
 import { performanceTracker } from './performance-tracker.js';
 import {
   PipelineError,
-  MessageRole,
   SafetyLevel,
   ConversationMode,
   type PipelineContext,
@@ -137,51 +140,47 @@ export class Pipeline {
         'Decay stage: State decay applied'
       );
 
-      // Stage 3: Classification (Sequential: Safety → Intent → Arbiter)
+      // Stage 3: Unified Classification (Safety + Intent + Domain + MultiIntent in ONE call)
       const classificationSpan = performanceTracker.startSpan('stage.classification', rootSpan);
-      const { decision, safetyResult, intentResult } = await this.classificationStage(
-        context,
-        messages,
-        decayedState,
-        classificationSpan
-      );
+      const { decision, safetyResult, intentResult, unifiedResult } =
+        await this.classificationStage(context, messages, decayedState, classificationSpan);
       performanceTracker.endSpan(classificationSpan);
 
-      // Stage 4: Parallel Enrichment (Global + Domain Classification + Extraction + Steering)
+      // Stage 4: Parallel Enrichment (Global + Extraction + Steering)
+      // Domain classification is now done in unified classifier - no separate call needed
       const enrichmentSpan = performanceTracker.startSpan('stage.enrichment', rootSpan);
       const enrichedState = await this.parallelEnrichmentStage(
         context,
         messages,
         decayedState,
         { decision, safetyResult, intentResult },
-        conversation.id
+        conversation.id,
+        unifiedResult // Pass unified result for domain filtering
       );
       performanceTracker.endSpan(enrichmentSpan);
 
-      // Stage 5: Handle message - check for multi-intent and orchestrate if needed
+      // Stage 5: Handle message - use multi-intent from unified classification
       const handlerSpan = performanceTracker.startSpan('stage.handler', rootSpan);
-
-      // Check for multi-intent after enrichment
-      const multiIntentSpan = performanceTracker.startSpan('multi_intent.classify', handlerSpan);
-      const multiIntentResult = await multiIntentClassifier.classify(
-        context.message,
-        enrichedState
-      );
-      performanceTracker.endSpan(multiIntentSpan);
 
       let handlerResult: { response: string; stateUpdates?: any };
 
-      // Use smart orchestration decision for better performance
-      const shouldOrchestrate = multiIntentClassifier.shouldOrchestrate(multiIntentResult);
+      // Use multi-intent detection from unified classifier (no separate LLM call!)
+      const shouldOrchestrate =
+        unifiedResult.multiIntent.isMultiIntent && unifiedResult.multiIntent.detectedModes.length > 1;
 
       if (shouldOrchestrate) {
         // Use orchestrator for multi-mode responses
+        // Build multi-intent result from unified classification
+        const detectedModes = unifiedResult.multiIntent.detectedModes;
+        const primaryMode = detectedModes[0] || decision.finalMode;
+        const secondaryModes = detectedModes.slice(1);
+
         logger.info(
           {
             conversationId: conversation.id,
-            primaryMode: multiIntentResult.primary.mode,
-            secondaryModes: multiIntentResult.secondary.map((m) => m.mode),
-            strategy: multiIntentResult.compositionStrategy,
+            primaryMode,
+            secondaryModes,
+            hasConflicts: unifiedResult.multiIntent.hasConflictingIntents,
           },
           'Handler stage: Multi-intent detected, using orchestrator'
         );
@@ -193,6 +192,16 @@ export class Pipeline {
           messages: messages.map((m) => ({ role: m.role, content: m.content })),
           currentMode: decision.finalMode,
           state: enrichedState as any, // ConversationState to Record<string, unknown>
+        };
+
+        // Build a compatible multi-intent result for the orchestrator
+        const multiIntentResult = {
+          primary: { mode: primaryMode, confidence: unifiedResult.confidence },
+          secondary: secondaryModes.map((m) => ({ mode: m, confidence: 0.7 })),
+          requiresOrchestration: true,
+          compositionStrategy: unifiedResult.multiIntent.hasConflictingIntents
+            ? ('blended' as const)
+            : ('sequential' as const),
         };
 
         const orchestrateSpan = performanceTracker.startSpan('handler.orchestrate', handlerSpan);
@@ -300,7 +309,8 @@ export class Pipeline {
   // ═══════════════════════════════════════════════════════════════════════
 
   /**
-   * Classification Stage: Sequential Safety → Intent → Arbiter
+   * Classification Stage: Unified Classification (ONE LLM call for all)
+   * Combines Safety + Intent + Domain + MultiIntent detection
    * Returns decision and classification results for enrichment
    */
   private async classificationStage(
@@ -312,51 +322,40 @@ export class Pipeline {
     decision: ArbiterDecision;
     safetyResult: SafetyResult;
     intentResult: IntentResult;
+    unifiedResult: UnifiedClassificationResult;
   }> {
     try {
       const classificationStart = Date.now();
 
-      // Step 1: Safety Classification (always runs first)
-      const safetyResult = await safetyClassifier.classify({
-        message: context.message,
-        recentUserMessages: messages
-          .filter((m) => m.role === MessageRole.USER)
-          .slice(-3)
-          .map((m) => m.content),
-        currentSafetyLevel: SafetyLevel.SAFE, // TODO: Track safety level in state
-      });
-
-      logger.info(
-        {
-          safetyLevel: safetyResult.level,
-          confidence: safetyResult.confidence,
-          signals: safetyResult.signals,
-          isCrisis: safetyResult.level === SafetyLevel.CRISIS,
-        },
-        'Classification: Safety check complete'
-      );
-
-      // Step 2: Intent Classification (runs sequentially after safety)
-      const intentResult = await intentClassifier.classify({
+      // UNIFIED CLASSIFICATION: One LLM call for Safety + Intent + Domain + MultiIntent
+      const unifiedResult = await unifiedClassifier.classify({
         message: context.message,
         recentMessages: messages.slice(-5).map((m) => ({
           role: m.role,
           content: m.content,
         })),
         currentMode: state.mode,
+        currentSafetyLevel: SafetyLevel.SAFE,
+        conversationId: state.conversationId,
       });
+
+      // Convert to legacy types for backward compatibility
+      const safetyResult = unifiedClassifier.toSafetyResult(unifiedResult);
+      const intentResult = unifiedClassifier.toIntentResult(unifiedResult);
 
       logger.info(
         {
+          safetyLevel: safetyResult.level,
           intent: intentResult.intent,
           suggestedMode: intentResult.suggestedMode,
-          confidence: intentResult.confidence,
-          entities: intentResult.entities.length,
+          relevantDomains: unifiedResult.relevantDomains,
+          isMultiIntent: unifiedResult.multiIntent.isMultiIntent,
+          confidence: unifiedResult.confidence,
         },
-        'Classification: Intent detection complete'
+        'Classification: Unified classification complete'
       );
 
-      // Step 3: Arbiter makes final decision
+      // Arbiter makes final decision (still needed for mode overrides)
       const decision = await arbiter.arbitrate({
         safetyResult,
         intentResult,
@@ -376,7 +375,7 @@ export class Pipeline {
         'Classification: Arbiter decision complete'
       );
 
-      return { decision, safetyResult, intentResult };
+      return { decision, safetyResult, intentResult, unifiedResult };
     } catch (error) {
       throw new PipelineError('classification', error as Error, context);
     }
@@ -389,6 +388,7 @@ export class Pipeline {
   /**
    * Parallel enrichment of state with context, extractions, and steering
    * Orchestrates 3 parallel groups while maintaining clear logging
+   * Now uses domain classification from unified result (no separate LLM call)
    */
   private async parallelEnrichmentStage(
     context: PipelineContext,
@@ -399,11 +399,12 @@ export class Pipeline {
       safetyResult: SafetyResult;
       intentResult: IntentResult;
     },
-    conversationId: string
+    conversationId: string,
+    unifiedResult?: UnifiedClassificationResult
   ): Promise<ConversationState> {
     const parallelStart = Date.now();
 
-    // Prepare state with messages for domain classification
+    // Prepare state with messages for domain operations
     const stateWithMessages = {
       ...decayedState,
       messages: [
@@ -415,22 +416,22 @@ export class Pipeline {
     };
 
     // ──────────────────────────────────────────────────────────────────────
-    // PARALLEL GROUP 1: Global Context + Domain Classification
+    // PARALLEL GROUP 1: Global Context (Domain classification from unified result)
     // ──────────────────────────────────────────────────────────────────────
     const parallelGroup1Start = Date.now();
 
-    const [globalResult, domainClassification] = await Promise.all([
-      // 4a: Global context extraction
-      globalStage.execute({
-        message: context.message,
-        state: decayedState,
-        safetyResult: classificationResults.safetyResult,
-        intentResult: classificationResults.intentResult,
-      }),
+    // Global context extraction (only one async operation now)
+    const globalResult = await globalStage.execute({
+      message: context.message,
+      state: decayedState,
+      safetyResult: classificationResults.safetyResult,
+      intentResult: classificationResults.intentResult,
+    });
 
-      // 4b: Domain relevance classification
-      pipelineDomainService.classifyDomainsAsync(stateWithMessages),
-    ]);
+    // Get domain definitions from unified result (NO LLM CALL - already classified!)
+    const domainClassification = unifiedResult
+      ? unifiedClassifier.toDomainDefinitions(unifiedResult)
+      : await pipelineDomainService.classifyDomainsAsync(stateWithMessages); // Fallback
 
     // Preserve existing global stage logging
     logger.info(
@@ -447,9 +448,10 @@ export class Pipeline {
       {
         conversationId,
         relevantDomains: domainClassification.map((d) => d.id),
+        domainsFromUnified: !!unifiedResult,
         parallelGroup1Ms: Date.now() - parallelGroup1Start,
       },
-      'Parallel Group 1: Global context + Domain classification complete'
+      'Parallel Group 1: Global context complete (domains from unified classification)'
     );
 
     // If no domains are relevant, return early with just global context

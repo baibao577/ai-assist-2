@@ -19,7 +19,8 @@ export class ResponseOrchestrator {
   };
 
   /**
-   * Orchestrate a multi-mode response
+   * Orchestrate a multi-mode response with lazy initialization
+   * Performance optimization: Generate primary first, only add secondary if valuable
    */
   async orchestrate(
     context: HandlerContext,
@@ -35,44 +36,79 @@ export class ResponseOrchestrator {
         return this.handleSingleMode(context, handlers, multiIntent.primary.mode);
       }
 
-      // Step 2: Get selected modes (limit to top modes)
-      const allIntents = [multiIntent.primary, ...multiIntent.secondary];
-      const selectedModes = allIntents
-        .slice(0, this.config.maxModesPerResponse)
-        .map((intent) => intent.mode);
+      // Step 2: LAZY INITIALIZATION - Generate primary response first
+      const primaryHandler = handlers.get(multiIntent.primary.mode);
+      if (!primaryHandler) {
+        throw new Error(`No handler for primary mode: ${multiIntent.primary.mode}`);
+      }
 
-      // Step 3: Generate responses from each mode handler in parallel
-      const modeResponses = await this.generateModeResponses(context, handlers, selectedModes);
+      const primaryResult = await primaryHandler.handle(context);
+      const primaryResponse = {
+        mode: multiIntent.primary.mode,
+        response: primaryResult.response,
+        stateUpdates: primaryResult.stateUpdates,
+      };
 
-      // Step 4: Filter out empty responses
-      const validResponses = modeResponses.filter(
+      // Step 3: Check if primary response already covers secondary intents
+      // Skip secondary if primary is comprehensive (> 200 chars) or secondary is low confidence
+      const secondaryModes = multiIntent.secondary
+        .filter((s) => s.confidence > 0.6) // Only high-confidence secondary intents
+        .slice(0, this.config.maxModesPerResponse - 1)
+        .map((s) => s.mode);
+
+      // If primary response is substantial or no high-confidence secondary, return primary only
+      if (primaryResponse.response.length > 300 || secondaryModes.length === 0) {
+        logger.debug(
+          {
+            primaryLength: primaryResponse.response.length,
+            secondaryModes,
+            reason: primaryResponse.response.length > 300 ? 'primary_comprehensive' : 'no_secondary',
+          },
+          'Lazy init: Using primary response only'
+        );
+
+        return {
+          response: primaryResponse.response,
+          segments: [],
+          modesUsed: [multiIntent.primary.mode],
+          primaryMode: multiIntent.primary.mode,
+          metadata: {
+            compositionTime: Date.now() - startTime,
+            segmentCount: 1,
+            transitionsAdded: false,
+          },
+          stateUpdates: primaryResult.stateUpdates,
+        };
+      }
+
+      // Step 4: Generate secondary responses (only if needed)
+      logger.debug({ secondaryModes }, 'Lazy init: Generating secondary responses');
+      const secondaryResponses = await this.generateModeResponses(context, handlers, secondaryModes);
+
+      // Step 5: Combine responses
+      const allResponses = [primaryResponse, ...secondaryResponses].filter(
         (r) => r.response && r.response.trim().length > 0
       );
 
-      if (validResponses.length === 0) {
-        logger.warn({ selectedModes }, 'No valid responses generated, using fallback');
-        return this.handleSingleMode(context, handlers, multiIntent.primary.mode);
-      }
-
-      // Step 5: Use LLM to intelligently compose the responses
-      const composedResponse = await this.composeWithLLM(
+      // Step 6: Compose responses (smart composition)
+      const composedResponse = await this.composeResponses(
         context,
-        validResponses,
-        multiIntent.primary.mode
+        allResponses,
+        multiIntent.primary.mode,
+        multiIntent.compositionStrategy
       );
 
-      // Step 6: Build orchestrated response
       return {
         response: composedResponse,
-        segments: [], // Simplified - no longer using segments
-        modesUsed: validResponses.map((r) => r.mode),
+        segments: [],
+        modesUsed: allResponses.map((r) => r.mode),
         primaryMode: multiIntent.primary.mode,
         metadata: {
           compositionTime: Date.now() - startTime,
-          segmentCount: validResponses.length,
+          segmentCount: allResponses.length,
           transitionsAdded: false,
         },
-        stateUpdates: this.mergeStateUpdates(validResponses),
+        stateUpdates: this.mergeStateUpdates(allResponses),
       };
     } catch (error) {
       logger.error({ error }, 'Orchestration failed');
@@ -152,18 +188,84 @@ export class ResponseOrchestrator {
   }
 
   /**
-   * Use LLM to intelligently compose multiple mode responses
+   * Smart composition: Use simple concatenation when possible, LLM only when needed
+   * Performance optimization: Avoid LLM call for non-conflicting responses
    */
-  private async composeWithLLM(
+  private async composeResponses(
     context: HandlerContext,
     modeResponses: Array<{ mode: ConversationMode; response: string }>,
-    primaryMode: ConversationMode
+    primaryMode: ConversationMode,
+    strategy?: 'sequential' | 'blended' | 'prioritized'
   ): Promise<string> {
     // If only one response, return it directly
     if (modeResponses.length === 1) {
       return modeResponses[0].response;
     }
 
+    // Check if responses have potential conflicts
+    const hasConflicts = this.detectConflicts(modeResponses);
+
+    if (!hasConflicts && strategy !== 'blended') {
+      // SIMPLE CONCATENATION: No LLM needed, just join responses naturally
+      logger.debug({ strategy, hasConflicts }, 'Smart composition: Using simple concatenation');
+
+      return modeResponses
+        .map((r) => r.response.trim())
+        .filter((r) => r.length > 0)
+        .join('\n\n');
+    }
+
+    // LLM COMPOSITION: Only when there are conflicts or blending is required
+    logger.debug({ strategy, hasConflicts }, 'Smart composition: Using LLM composition');
+    return this.composeWithLLM(context, modeResponses, primaryMode);
+  }
+
+  /**
+   * Detect if responses have conflicting content that requires LLM blending
+   */
+  private detectConflicts(
+    responses: Array<{ mode: ConversationMode; response: string }>
+  ): boolean {
+    // Simple heuristic: Check for overlapping topics or contradictions
+    // For now, check if multiple responses are substantial (might overlap)
+    const substantialResponses = responses.filter((r) => r.response.length > 100);
+
+    if (substantialResponses.length <= 1) {
+      return false; // Only one substantial response, no conflict
+    }
+
+    // Check for potential topic overlap by looking at common words
+    const responseWords = responses.map((r) =>
+      new Set(
+        r.response
+          .toLowerCase()
+          .split(/\s+/)
+          .filter((w) => w.length > 4)
+      )
+    );
+
+    // If responses share many words, there might be overlap that needs blending
+    for (let i = 0; i < responseWords.length; i++) {
+      for (let j = i + 1; j < responseWords.length; j++) {
+        const intersection = [...responseWords[i]].filter((w) => responseWords[j].has(w));
+        if (intersection.length > 5) {
+          return true; // Significant word overlap, use LLM
+        }
+      }
+    }
+
+    return false; // No significant overlap, simple concatenation is fine
+  }
+
+  /**
+   * Use LLM to intelligently compose multiple mode responses
+   * Only called when conflicts are detected
+   */
+  private async composeWithLLM(
+    context: HandlerContext,
+    modeResponses: Array<{ mode: ConversationMode; response: string }>,
+    primaryMode: ConversationMode
+  ): Promise<string> {
     const compositionPrompt = `You are an intelligent response composer. Given multiple mode-specific responses to a user's message, create a single, cohesive response.
 
 User's original message: "${context.message}"
@@ -177,7 +279,7 @@ Instructions:
 1. Combine the responses naturally without explicitly mentioning the different modes
 2. Prioritize content from the primary mode (${primaryMode})
 3. Ensure the response flows naturally and doesn't repeat information
-4. Keep the combined response concise and focused
+4. Keep the combined response concise and focused (under 400 words)
 5. If responses conflict, prefer the primary mode's perspective
 6. Do NOT use phrases like "In terms of..." or "Regarding..." to separate topics
 7. Create a unified, natural response as if it came from a single coherent assistant
@@ -194,7 +296,7 @@ Generate the combined response:`;
         ],
         {
           temperature: 0.3,
-          maxTokens: 800,
+          maxTokens: 500, // Reduced for performance
         }
       );
 
