@@ -72,9 +72,9 @@ Remember: You're helping users build sustainable habits and achieve meaningful g
       // Get Goal Domain extraction from pipeline
       const goalExtraction = this.getGoalExtraction(context);
 
-      if (!goalExtraction) {
+      if (!goalExtraction || goalExtraction.action === null) {
         // No goal-related intent detected, use LLM for general conversation
-        logger.debug('TrackProgressHandler: No goal extraction found, using LLM');
+        logger.debug('TrackProgressHandler: No goal extraction or null action found, using LLM');
         const response = await this.generateResponse(this.buildSystemPrompt(context), context);
         return { response };
       }
