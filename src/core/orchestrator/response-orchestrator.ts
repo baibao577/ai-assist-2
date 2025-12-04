@@ -7,7 +7,7 @@
 
 import { ConversationMode } from '@/types/modes.js';
 import { logger } from '@/core/logger.js';
-import type { HandlerContext, HandlerResult } from '@/types/index.js';
+import type { HandlerContext, HandlerResult, IModeHandler } from '@/types/index.js';
 import type {
   ModeSegment,
   OrchestratedResponse,
@@ -17,7 +17,6 @@ import type {
 } from './types.js';
 import { multiIntentClassifier } from './multi-intent.classifier.js';
 import { ResponseComposer } from './response-composer.js';
-import type { BaseModeHandler } from '../modes/base-handler.js';
 
 export class ResponseOrchestrator {
   private composer: ResponseComposer;
@@ -65,7 +64,7 @@ export class ResponseOrchestrator {
    */
   async orchestrate(
     context: HandlerContext,
-    handlers: Map<ConversationMode, BaseModeHandler>
+    handlers: Map<ConversationMode, IModeHandler>
   ): Promise<OrchestratedResponse> {
     const startTime = Date.now();
 
@@ -118,8 +117,17 @@ export class ResponseOrchestrator {
    * Classify message intents
    */
   private async classifyIntents(context: HandlerContext): Promise<MultiIntentResult> {
-    const state = context.state || { messages: [], conversationId: '' };
-    return multiIntentClassifier.classify(context.message, state);
+    // Convert HandlerContext state to ConversationState for classifier
+    const state = {
+      id: context.conversationId,
+      conversationId: context.conversationId,
+      mode: context.currentMode,
+      contextElements: (context.state as any).contextElements || [],
+      goals: (context.state as any).goals || [],
+      messages: context.messages || [],
+      metadata: (context.state as any).metadata || {},
+    };
+    return multiIntentClassifier.classify(context.message, state as any);
   }
 
   /**
@@ -171,7 +179,7 @@ export class ResponseOrchestrator {
    */
   private async generateSegments(
     context: HandlerContext,
-    handlers: Map<ConversationMode, BaseModeHandler>,
+    handlers: Map<ConversationMode, IModeHandler>,
     modes: ConversationMode[]
   ): Promise<ModeSegment[]> {
     if (this.config.parallelExecution) {
@@ -214,7 +222,7 @@ export class ResponseOrchestrator {
    */
   private async generateSegmentWithTimeout(
     context: HandlerContext,
-    handler: BaseModeHandler,
+    handler: IModeHandler,
     mode: ConversationMode
   ): Promise<ModeSegment> {
     const timeoutPromise = new Promise<never>((_, reject) =>
@@ -231,7 +239,7 @@ export class ResponseOrchestrator {
    */
   private async generateSegment(
     context: HandlerContext,
-    handler: BaseModeHandler,
+    handler: IModeHandler,
     mode: ConversationMode
   ): Promise<ModeSegment> {
     // Check if handler supports segment generation
@@ -327,7 +335,7 @@ export class ResponseOrchestrator {
    */
   private async handleSingleMode(
     context: HandlerContext,
-    handlers: Map<ConversationMode, BaseModeHandler>,
+    handlers: Map<ConversationMode, IModeHandler>,
     mode: ConversationMode
   ): Promise<OrchestratedResponse> {
     const handler = handlers.get(mode);

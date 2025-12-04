@@ -56,6 +56,7 @@ import { smalltalkHandler } from '@/core/modes/smalltalk.handler.js';
 import { metaHandler } from '@/core/modes/meta.handler.js';
 import { trackProgressHandler } from '@/core/modes/track-progress.handler.js'; // MVP v4
 import { logger } from '@/core/logger.js';
+import { multiIntentClassifier, responseOrchestrator } from '@/core/orchestrator/index.js'; // MVP v3
 import { pipelineDomainService } from './pipeline-domain.service.js';
 import { pipelineCoreService } from './pipeline-core.service.js';
 import {
@@ -143,45 +144,94 @@ export class Pipeline {
         conversation.id
       );
 
-      // Stage 5: Handle message with appropriate mode handler
-      const handler = this.modeHandlers.get(decision.finalMode);
-      if (!handler) {
-        throw new Error(`No handler found for mode: ${decision.finalMode}`);
-      }
+      // Stage 5: Handle message - check for multi-intent and orchestrate if needed
 
-      logger.info(
-        {
-          conversationId: conversation.id,
-          handlerMode: decision.finalMode,
-          safetyLevel: decision.safetyContext.level,
-          isCrisis: decision.safetyContext.isCrisis,
-          contextProvided: {
-            messages: messages.length,
-            contextElements: enrichedState.contextElements.length,
-            activeGoals: enrichedState.goals.filter((g) => g.status === 'active').length,
-            activeDomains: enrichedState.metadata?.activeDomains?.length || 0,
-            steeringHints: enrichedState.steeringHints?.suggestions?.length || 0,
+      // Check for multi-intent after enrichment
+      const multiIntentResult = await multiIntentClassifier.classify(context.message, enrichedState);
+
+      let handlerResult: { response: string; stateUpdates?: any };
+
+      if (multiIntentResult.requiresOrchestration) {
+        // Use orchestrator for multi-mode responses
+        logger.info(
+          {
+            conversationId: conversation.id,
+            primaryMode: multiIntentResult.primary.mode,
+            secondaryModes: multiIntentResult.secondary.map(m => m.mode),
+            strategy: multiIntentResult.compositionStrategy,
           },
-        },
-        'Handler stage: Routing to mode handler'
-      );
+          'Handler stage: Multi-intent detected, using orchestrator'
+        );
 
-      // Build classification context for handler
-      const classificationContext: ClassificationContext = {
-        decision,
-        safetySignals: safetyResult.signals || [],
-        entities: intentResult.entities || [],
-      };
+        const handlerContext = {
+          conversationId: conversation.id,
+          userId: context.userId,
+          message: context.message,
+          messages: messages.map((m) => ({ role: m.role, content: m.content })),
+          currentMode: decision.finalMode,
+          state: enrichedState as any, // ConversationState to Record<string, unknown>
+        };
 
-      const handlerResult = await handler.handle({
-        conversationId: conversation.id,
-        userId: context.userId,
-        message: context.message,
-        messages: messages.map((m) => ({ role: m.role, content: m.content })),
-        currentMode: decision.finalMode,
-        state: enrichedState as any, // Use fully enriched state
-        classification: classificationContext,
-      });
+        const orchestratedResponse = await responseOrchestrator.orchestrate(
+          handlerContext,
+          this.modeHandlers
+        );
+
+        handlerResult = {
+          response: orchestratedResponse.response,
+          stateUpdates: orchestratedResponse.stateUpdates,
+        };
+
+        logger.info(
+          {
+            conversationId: conversation.id,
+            modesUsed: orchestratedResponse.modesUsed,
+            segments: orchestratedResponse.segments.length,
+            compositionTime: orchestratedResponse.metadata.compositionTime,
+          },
+          'Handler stage: Orchestration complete'
+        );
+      } else {
+        // Single intent - use traditional handler
+        const handler = this.modeHandlers.get(decision.finalMode);
+        if (!handler) {
+          throw new Error(`No handler found for mode: ${decision.finalMode}`);
+        }
+
+        logger.info(
+          {
+            conversationId: conversation.id,
+            handlerMode: decision.finalMode,
+            safetyLevel: decision.safetyContext.level,
+            isCrisis: decision.safetyContext.isCrisis,
+            contextProvided: {
+              messages: messages.length,
+              contextElements: enrichedState.contextElements.length,
+              activeGoals: enrichedState.goals.filter((g) => g.status === 'active').length,
+              activeDomains: enrichedState.metadata?.activeDomains?.length || 0,
+              steeringHints: enrichedState.steeringHints?.suggestions?.length || 0,
+            },
+          },
+          'Handler stage: Single intent, routing to mode handler'
+        );
+
+        // Build classification context for handler
+        const classificationContext: ClassificationContext = {
+          decision,
+          safetySignals: safetyResult.signals || [],
+          entities: intentResult.entities || [],
+        };
+
+        handlerResult = await handler.handle({
+          conversationId: conversation.id,
+          userId: context.userId,
+          message: context.message,
+          messages: messages.map((m) => ({ role: m.role, content: m.content })),
+          currentMode: decision.finalMode,
+          state: enrichedState as any, // Use fully enriched state
+          classification: classificationContext,
+        });
+      }
 
       // Stage 6: Save messages and updated state
       const messageId = await pipelineCoreService.saveStage(

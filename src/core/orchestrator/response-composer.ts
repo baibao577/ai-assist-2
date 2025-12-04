@@ -242,8 +242,8 @@ Generate a transition that fits the specific content and context above.`;
    * Get appropriate transition phrase
    */
   async getTransition(
-    from: ModeSegment['contentType'],
-    to: ModeSegment['contentType'],
+    _from: ModeSegment['contentType'],
+    _to: ModeSegment['contentType'],
     fromSegment?: ModeSegment,
     toSegment?: ModeSegment
   ): Promise<string> {
