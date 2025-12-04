@@ -151,7 +151,9 @@ export class GoalRepository {
       return updated;
     } catch (error) {
       logger.error({ error, goalId, value }, 'Failed to update goal progress');
-      throw error instanceof DatabaseError ? error : new DatabaseError('update progress', error as Error);
+      throw error instanceof DatabaseError
+        ? error
+        : new DatabaseError('update progress', error as Error);
     }
   }
 
@@ -161,7 +163,10 @@ export class GoalRepository {
    * @param updates - Fields to update
    * @returns Updated goal
    */
-  async update(id: string, updates: Partial<Omit<Goal, 'id' | 'userId' | 'createdAt'>>): Promise<Goal> {
+  async update(
+    id: string,
+    updates: Partial<Omit<Goal, 'id' | 'userId' | 'createdAt'>>
+  ): Promise<Goal> {
     try {
       const [updated] = await this.db
         .update(goals)
@@ -177,7 +182,9 @@ export class GoalRepository {
       return updated;
     } catch (error) {
       logger.error({ error, goalId: id, updates }, 'Failed to update goal');
-      throw error instanceof DatabaseError ? error : new DatabaseError('update goal', error as Error);
+      throw error instanceof DatabaseError
+        ? error
+        : new DatabaseError('update goal', error as Error);
     }
   }
 
@@ -205,7 +212,9 @@ export class GoalRepository {
       return completed;
     } catch (error) {
       logger.error({ error, goalId: id }, 'Failed to complete goal');
-      throw error instanceof DatabaseError ? error : new DatabaseError('complete goal', error as Error);
+      throw error instanceof DatabaseError
+        ? error
+        : new DatabaseError('complete goal', error as Error);
     }
   }
 
@@ -232,7 +241,9 @@ export class GoalRepository {
       return paused;
     } catch (error) {
       logger.error({ error, goalId: id }, 'Failed to pause goal');
-      throw error instanceof DatabaseError ? error : new DatabaseError('pause goal', error as Error);
+      throw error instanceof DatabaseError
+        ? error
+        : new DatabaseError('pause goal', error as Error);
     }
   }
 
@@ -259,7 +270,9 @@ export class GoalRepository {
       return abandoned;
     } catch (error) {
       logger.error({ error, goalId: id }, 'Failed to abandon goal');
-      throw error instanceof DatabaseError ? error : new DatabaseError('abandon goal', error as Error);
+      throw error instanceof DatabaseError
+        ? error
+        : new DatabaseError('abandon goal', error as Error);
     }
   }
 
@@ -286,7 +299,9 @@ export class GoalRepository {
       return resumed;
     } catch (error) {
       logger.error({ error, goalId: id }, 'Failed to resume goal');
-      throw error instanceof DatabaseError ? error : new DatabaseError('resume goal', error as Error);
+      throw error instanceof DatabaseError
+        ? error
+        : new DatabaseError('resume goal', error as Error);
     }
   }
 

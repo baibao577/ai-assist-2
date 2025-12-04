@@ -58,6 +58,8 @@ export interface SteeringHints {
 export interface ExtractionContext {
   recentMessages: Array<{ role: string; content: string }>;
   domainContext: any;
+  conversationId?: string;
+  userId?: string;
 }
 
 /**

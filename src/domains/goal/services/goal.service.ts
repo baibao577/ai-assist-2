@@ -8,6 +8,7 @@
  */
 
 import { goalRepository, progressRepository } from '@/database/repositories/index.js';
+import { agentStateService } from '@/services/agent-state.service.js';
 import type { Goal, ProgressEntry, NewGoal } from '@/database/schema.js';
 import type { GoalData } from '../schemas/goal.schema.js';
 import { logger } from '@/core/logger.js';
@@ -34,10 +35,7 @@ export class GoalService {
   /**
    * Create a new goal with duplicate prevention
    */
-  async createGoal(
-    userId: string,
-    goalData: Partial<GoalData>
-  ): Promise<GoalOperationResult> {
+  async createGoal(userId: string, goalData: Partial<GoalData>): Promise<GoalOperationResult> {
     try {
       // Check for similar existing goals
       const existingGoals = await goalRepository.getActiveGoals(userId);
@@ -47,7 +45,7 @@ export class GoalService {
         return {
           success: false,
           message: `You already have a similar goal: "${similarGoal.title}". Would you like to update it instead?`,
-          data: { existingGoal: similarGoal }
+          data: { existingGoal: similarGoal },
         };
       }
 
@@ -66,7 +64,7 @@ export class GoalService {
         conversationId: null,
         completedAt: null,
         lastProgressAt: null,
-        metadata: null
+        metadata: null,
       };
 
       const createdGoal = await goalRepository.create(newGoalData);
@@ -74,14 +72,14 @@ export class GoalService {
       return {
         success: true,
         message: this.formatGoalCreationMessage(createdGoal),
-        data: { goal: createdGoal }
+        data: { goal: createdGoal },
       };
     } catch (error) {
       logger.error({ error, userId, goalData }, 'Failed to create goal');
       return {
         success: false,
         message: 'Failed to create goal. Please try again.',
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
@@ -101,7 +99,7 @@ export class GoalService {
       if (!goal || goal.userId !== userId) {
         return {
           success: false,
-          message: 'Goal not found or access denied.'
+          message: 'Goal not found or access denied.',
         };
       }
 
@@ -112,7 +110,7 @@ export class GoalService {
         notes: notes || null,
         source: 'manual',
         conversationId: null,
-        metadata: null
+        metadata: null,
       });
 
       // Update goal's current value
@@ -126,7 +124,7 @@ export class GoalService {
         return {
           success: true,
           message: this.formatGoalAchievedMessage(goal, newCurrentValue),
-          data: { goal, progressEntry, achieved: true }
+          data: { goal, progressEntry, achieved: true },
         };
       }
 
@@ -134,14 +132,14 @@ export class GoalService {
       return {
         success: true,
         message: this.formatProgressMessage(goal, value, newCurrentValue),
-        data: { goal, progressEntry, newCurrentValue }
+        data: { goal, progressEntry, newCurrentValue },
       };
     } catch (error) {
       logger.error({ error, userId, goalId, value }, 'Failed to log progress');
       return {
         success: false,
         message: 'Failed to log progress. Please try again.',
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
@@ -152,7 +150,8 @@ export class GoalService {
   async selectGoalForProgress(
     userId: string,
     message: string,
-    value: number
+    value: number,
+    conversationId?: string
   ): Promise<GoalOperationResult> {
     try {
       const activeGoals = await goalRepository.getActiveGoals(userId);
@@ -160,8 +159,8 @@ export class GoalService {
       if (activeGoals.length === 0) {
         return {
           success: false,
-          message: 'You don\'t have any active goals. Would you like to create one?',
-          data: { needsGoalCreation: true }
+          message: "You don't have any active goals. Would you like to create one?",
+          data: { needsGoalCreation: true },
         };
       }
 
@@ -169,18 +168,51 @@ export class GoalService {
       const scoredGoals = this.scoreGoalsForMessage(message, activeGoals);
 
       // If multiple goals have the same high score, ask for clarification
-      const topScore = Math.max(...scoredGoals.map(g => g.score));
-      const topGoals = scoredGoals.filter(g => g.score === topScore);
+      const topScore = Math.max(...scoredGoals.map((g) => g.score));
+      const topGoals = scoredGoals.filter((g) => g.score === topScore);
 
       if (topGoals.length > 1) {
+        // Save agent state for later selection
+        if (conversationId) {
+          const stateData = {
+            goals: topGoals.map((g, index) => ({
+              index: index + 1,
+              id: g.goal.id,
+              title: g.goal.title,
+              currentValue: g.goal.currentValue,
+              targetValue: g.goal.targetValue,
+              unit: g.goal.unit,
+            })),
+            pendingValue: value,
+            originalMessage: message,
+            userId,
+          };
+
+          await agentStateService.saveState(
+            conversationId,
+            'goal',
+            'selection_pending',
+            stateData,
+            300 // 5 minutes TTL
+          );
+
+          logger.debug(
+            { conversationId, goalsCount: topGoals.length },
+            'Saved goal selection state'
+          );
+        }
+
         return {
           success: false,
-          message: this.formatGoalSelectionPrompt(topGoals.map(g => g.goal), value),
+          message: this.formatGoalSelectionPrompt(
+            topGoals.map((g) => g.goal),
+            value
+          ),
           data: {
             needsClarification: true,
-            goals: topGoals.map(g => g.goal),
-            pendingValue: value
-          }
+            goals: topGoals.map((g) => g.goal),
+            pendingValue: value,
+          },
         };
       }
 
@@ -192,7 +224,7 @@ export class GoalService {
       return {
         success: false,
         message: 'Failed to process progress. Please try again.',
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
@@ -224,21 +256,21 @@ export class GoalService {
         return {
           success: true,
           message: this.formatNoGoalsMessage(filter),
-          data: { goals: [] }
+          data: { goals: [] },
         };
       }
 
       return {
         success: true,
         message: this.formatGoalsList(goals, filter),
-        data: { goals }
+        data: { goals },
       };
     } catch (error) {
       logger.error({ error, userId, filter }, 'Failed to get goals');
       return {
         success: false,
         message: 'Failed to retrieve goals. Please try again.',
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
@@ -249,13 +281,13 @@ export class GoalService {
   async analyzeProgress(userId: string, goalId?: string): Promise<GoalOperationResult> {
     try {
       const goals = goalId
-        ? [await goalRepository.findById(goalId)].filter(Boolean) as Goal[]
+        ? ([await goalRepository.findById(goalId)].filter(Boolean) as Goal[])
         : await goalRepository.getActiveGoals(userId);
 
       if (goals.length === 0) {
         return {
           success: false,
-          message: 'No goals found to analyze.'
+          message: 'No goals found to analyze.',
         };
       }
 
@@ -270,14 +302,14 @@ export class GoalService {
       return {
         success: true,
         message: this.formatAnalyticsMessage(analytics),
-        data: { analytics }
+        data: { analytics },
       };
     } catch (error) {
       logger.error({ error, userId, goalId }, 'Failed to analyze progress');
       return {
         success: false,
         message: 'Failed to analyze progress. Please try again.',
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
@@ -295,7 +327,7 @@ export class GoalService {
       if (!goal || goal.userId !== userId) {
         return {
           success: false,
-          message: 'Goal not found or access denied.'
+          message: 'Goal not found or access denied.',
         };
       }
 
@@ -306,14 +338,14 @@ export class GoalService {
       return {
         success: true,
         message: `Goal "${updatedGoal?.title}" has been updated successfully.`,
-        data: { goal: updatedGoal }
+        data: { goal: updatedGoal },
       };
     } catch (error) {
       logger.error({ error, userId, goalId, updates }, 'Failed to update goal');
       return {
         success: false,
         message: 'Failed to update goal. Please try again.',
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
@@ -327,7 +359,7 @@ export class GoalService {
       if (!goal || goal.userId !== userId) {
         return {
           success: false,
-          message: 'Goal not found or access denied.'
+          message: 'Goal not found or access denied.',
         };
       }
 
@@ -337,14 +369,14 @@ export class GoalService {
       return {
         success: true,
         message: `Goal "${completedGoal?.title}" has been completed! 🎉`,
-        data: { goal: completedGoal }
+        data: { goal: completedGoal },
       };
     } catch (error) {
       logger.error({ error, userId, goalId }, 'Failed to complete goal');
       return {
         success: false,
         message: 'Failed to complete goal. Please try again.',
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
@@ -363,16 +395,19 @@ export class GoalService {
 
     // Exact match
     const exactMatch = existingGoals.find(
-      goal => goal.title.toLowerCase().trim() === normalizedTitle
+      (goal) => goal.title.toLowerCase().trim() === normalizedTitle
     );
     if (exactMatch) return exactMatch;
 
     // 80% word overlap similarity
-    const titleWords = normalizedTitle.split(/\s+/).filter(w => w.length > 2);
+    const titleWords = normalizedTitle.split(/\s+/).filter((w) => w.length > 2);
     for (const goal of existingGoals) {
-      const goalWords = goal.title.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-      const matchingWords = titleWords.filter(word =>
-        goalWords.some(gWord => gWord.includes(word) || word.includes(gWord))
+      const goalWords = goal.title
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((w) => w.length > 2);
+      const matchingWords = titleWords.filter((word) =>
+        goalWords.some((gWord) => gWord.includes(word) || word.includes(gWord))
       );
 
       const similarity = matchingWords.length / Math.max(titleWords.length, 1);
@@ -391,31 +426,33 @@ export class GoalService {
   ): Array<{ goal: Goal; score: number }> {
     const lowerMessage = message.toLowerCase();
 
-    return goals.map(goal => {
-      let score = 0;
-      const goalTitle = goal.title.toLowerCase();
-      const goalWords = goalTitle.split(/\s+/).filter(w => w.length > 2);
+    return goals
+      .map((goal) => {
+        let score = 0;
+        const goalTitle = goal.title.toLowerCase();
+        const goalWords = goalTitle.split(/\s+/).filter((w) => w.length > 2);
 
-      // Check for keyword matches
-      for (const word of goalWords) {
-        if (lowerMessage.includes(word)) {
-          score += 10;
+        // Check for keyword matches
+        for (const word of goalWords) {
+          if (lowerMessage.includes(word)) {
+            score += 10;
+          }
         }
-      }
 
-      // Boost score for recently active goals
-      const lastProgressDate = goal.lastProgressAt || goal.createdAt;
-      const daysSinceActivity = Math.floor(
-        (Date.now() - new Date(lastProgressDate).getTime()) / (1000 * 60 * 60 * 24)
-      );
-      if (daysSinceActivity < 7) score += 5;
-      if (daysSinceActivity < 3) score += 5;
+        // Boost score for recently active goals
+        const lastProgressDate = goal.lastProgressAt || goal.createdAt;
+        const daysSinceActivity = Math.floor(
+          (Date.now() - new Date(lastProgressDate).getTime()) / (1000 * 60 * 60 * 24)
+        );
+        if (daysSinceActivity < 7) score += 5;
+        if (daysSinceActivity < 3) score += 5;
 
-      // Slightly penalize completed goals
-      if (goal.status === 'completed') score -= 3;
+        // Slightly penalize completed goals
+        if (goal.status === 'completed') score -= 3;
 
-      return { goal, score };
-    }).sort((a, b) => b.score - a.score);
+        return { goal, score };
+      })
+      .sort((a, b) => b.score - a.score);
   }
 
   /**
@@ -449,7 +486,7 @@ export class GoalService {
       daysActive,
       averageProgressPerDay,
       estimatedCompletionDate,
-      recentEntries: entries
+      recentEntries: entries,
     };
   }
 
@@ -473,9 +510,7 @@ export class GoalService {
 
   private formatProgressMessage(goal: Goal, value: number, newTotal: number): string {
     const progressBar = this.createProgressBar(newTotal, goal.targetValue || 100);
-    const percentage = goal.targetValue
-      ? Math.round((newTotal / goal.targetValue) * 100)
-      : 0;
+    const percentage = goal.targetValue ? Math.round((newTotal / goal.targetValue) * 100) : 0;
 
     return `📊 Progress logged for "${goal.title}"
 Added: ${value}${goal.unit ? ' ' + goal.unit : ''}
@@ -509,11 +544,12 @@ Well done on reaching this milestone! 🏆`;
   }
 
   private formatGoalsList(goals: Goal[], filter: string): string {
-    const header = filter === 'active'
-      ? '📋 Your Active Goals:'
-      : filter === 'completed'
-      ? '✅ Your Completed Goals:'
-      : '📊 All Your Goals:';
+    const header =
+      filter === 'active'
+        ? '📋 Your Active Goals:'
+        : filter === 'completed'
+          ? '✅ Your Completed Goals:'
+          : '📊 All Your Goals:';
 
     const lines = [header, ''];
 
@@ -539,11 +575,11 @@ Well done on reaching this milestone! 🏆`;
 
   private formatNoGoalsMessage(filter: string): string {
     if (filter === 'active') {
-      return 'You don\'t have any active goals yet. Would you like to set one?';
+      return "You don't have any active goals yet. Would you like to set one?";
     } else if (filter === 'completed') {
-      return 'You haven\'t completed any goals yet. Keep working on your active goals!';
+      return "You haven't completed any goals yet. Keep working on your active goals!";
     } else {
-      return 'You don\'t have any goals yet. Let\'s create your first goal!';
+      return "You don't have any goals yet. Let's create your first goal!";
     }
   }
 
@@ -562,7 +598,7 @@ Well done on reaching this milestone! 🏆`;
 
       if (analysis.recentEntries.length > 0) {
         lines.push('   Recent activity:');
-        analysis.recentEntries.slice(0, 3).forEach(entry => {
+        analysis.recentEntries.slice(0, 3).forEach((entry) => {
           const date = new Date(entry.loggedAt).toLocaleDateString();
           lines.push(`     • ${date}: +${entry.value}`);
         });

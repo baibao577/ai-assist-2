@@ -103,6 +103,8 @@ export class PipelineDomainService {
           content: m.content,
         })),
         domainContext: state.domainContext?.[domain.id] || {},
+        conversationId: state.conversationId,
+        userId: state.metadata?.userId as string | undefined,
       };
 
       const extraction = await extractor.extract(currentMessage, context);

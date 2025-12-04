@@ -32,7 +32,7 @@ export class GoalSelectionStrategy extends BaseSteeringStrategy {
 
     // Simple heuristic check - the actual LLM analysis will happen in generateHints
     const selectionKeywords = ['which goal', 'select', 'specify', 'which one', 'please respond'];
-    const hasSelectionKeyword = selectionKeywords.some(k =>
+    const hasSelectionKeyword = selectionKeywords.some((k) =>
       lastAssistantMessage.toLowerCase().includes(k)
     );
 
@@ -156,7 +156,7 @@ If no goals are listed, return {"goals": []}.`;
    * Convert Goal entities to GoalOptions
    */
   private goalsToOptions(goals: Goal[]): GoalOption[] {
-    return goals.map(goal => ({
+    return goals.map((goal) => ({
       id: goal.id,
       title: goal.title,
       currentValue: goal.currentValue ?? undefined,

@@ -6,6 +6,7 @@
 
 import { sqliteTable, text, integer, real, index } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
+import { v4 as uuidv4 } from 'uuid';
 
 // Conversations table
 export const conversations = sqliteTable('conversations', {
@@ -184,6 +185,35 @@ export const goalMilestones = sqliteTable(
   })
 );
 
+// ============================================================================
+// Agent States Table - For temporary domain-specific states
+// ============================================================================
+
+export const agentStates = sqliteTable(
+  'agent_states',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => uuidv4()),
+    conversationId: text('conversation_id')
+      .notNull()
+      .references(() => conversations.id),
+    domainId: text('domain_id').notNull(), // 'goal', 'health', 'finance', etc.
+    stateType: text('state_type').notNull(), // 'selection_pending', 'multi_step', etc.
+    stateData: text('state_data').notNull(), // JSON string - domain-specific structure
+    createdAt: integer('created_at', { mode: 'timestamp' })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+    resolved: integer('resolved', { mode: 'boolean' }).notNull().default(0),
+  },
+  (table) => ({
+    conversationIdx: index('idx_agent_states_conversation').on(table.conversationId),
+    domainIdx: index('idx_agent_states_domain').on(table.domainId),
+    expiresIdx: index('idx_agent_states_expires').on(table.expiresAt),
+  })
+);
+
 // Type exports for insert and select
 export type Conversation = typeof conversations.$inferSelect;
 export type NewConversation = typeof conversations.$inferInsert;
@@ -201,3 +231,7 @@ export type ProgressEntry = typeof progressEntries.$inferSelect;
 export type NewProgressEntry = typeof progressEntries.$inferInsert;
 export type GoalMilestone = typeof goalMilestones.$inferSelect;
 export type NewGoalMilestone = typeof goalMilestones.$inferInsert;
+
+// Agent States type exports
+export type AgentState = typeof agentStates.$inferSelect;
+export type NewAgentState = typeof agentStates.$inferInsert;

@@ -8,11 +8,7 @@
  */
 
 import { BaseModeHandler } from './base-handler.js';
-import {
-  ConversationMode,
-  type HandlerContext,
-  type HandlerResult,
-} from '@/types/index.js';
+import { ConversationMode, type HandlerContext, type HandlerResult } from '@/types/index.js';
 import { goalService } from '@/domains/goal/services/index.js';
 import type { ConversationState } from '@/types/state.js';
 import type { GoalData } from '@/domains/goal/schemas/goal.schema.js';
@@ -79,10 +75,7 @@ Remember: You're helping users build sustainable habits and achieve meaningful g
       if (!goalExtraction) {
         // No goal-related intent detected, use LLM for general conversation
         logger.debug('TrackProgressHandler: No goal extraction found, using LLM');
-        const response = await this.generateResponse(
-          this.buildSystemPrompt(context),
-          context
-        );
+        const response = await this.generateResponse(this.buildSystemPrompt(context), context);
         return { response };
       }
 
@@ -101,7 +94,7 @@ Remember: You're helping users build sustainable habits and achieve meaningful g
     } catch (error) {
       logger.error({ error, mode: this.mode }, 'TrackProgressHandler: Error handling message');
       return {
-        response: "I encountered an error while processing your goal request. Please try again.",
+        response: 'I encountered an error while processing your goal request. Please try again.',
       };
     }
   }
@@ -119,7 +112,7 @@ Remember: You're helping users build sustainable habits and achieve meaningful g
       case 'set_goal':
         return await goalService.createGoal(userId, goalData);
 
-      case 'log_progress':
+      case 'log_progress': {
         // If we have a specific goal ID, log directly
         if (goalData.goalId) {
           return await goalService.logProgress(
@@ -130,14 +123,37 @@ Remember: You're helping users build sustainable habits and achieve meaningful g
           );
         }
         // Otherwise, try to select the right goal
-        return await goalService.selectGoalForProgress(
+        const selectionResult = await goalService.selectGoalForProgress(
           userId,
           context.message,
-          goalData.progressValue || 0
+          goalData.progressValue || 0,
+          context.conversationId
         );
 
-      case 'goal_selected':
-        // User selected a goal from clarification
+        // If clarification is needed, store pending state
+        if (selectionResult.data?.needsClarification) {
+          return {
+            message: selectionResult.message,
+            data: {
+              domainContext: {
+                goal: {
+                  pendingClarification: {
+                    type: 'goal_selection',
+                    askedAt: new Date().toISOString(),
+                    options: selectionResult.data.goals,
+                    pendingValue: selectionResult.data.pendingValue,
+                    originalMessage: context.message,
+                  },
+                },
+              },
+            },
+          };
+        }
+        return selectionResult;
+      }
+
+      case 'goal_selected': {
+        // User selected a goal from clarification - goalId already provided by extractor
         if (goalData.goalId && goalData.progressValue !== undefined) {
           return await goalService.logProgress(
             userId,
@@ -147,6 +163,7 @@ Remember: You're helping users build sustainable habits and achieve meaningful g
           );
         }
         return { message: 'Please specify which goal you meant.' };
+      }
 
       case 'view_goals':
         return await goalService.getGoals(userId, 'active');
@@ -171,10 +188,7 @@ Remember: You're helping users build sustainable habits and achieve meaningful g
 
       default:
         // Use LLM for unrecognized actions
-        const response = await this.generateResponse(
-          this.buildSystemPrompt(context),
-          context
-        );
+        const response = await this.generateResponse(this.buildSystemPrompt(context), context);
         return { message: response };
     }
   }

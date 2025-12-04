@@ -20,7 +20,7 @@ export const GoalDataSchema = z.object({
     'view_goals',
     'check_progress',
     'update_goal',
-    'goal_selected',  // Special: user selected a goal from list
+    'goal_selected', // Special: user selected a goal from list
     'clarification_response', // Special: user provided clarification
   ]),
 
@@ -40,22 +40,30 @@ export const GoalDataSchema = z.object({
   baselineValue: z.number().optional(),
 
   // For clarification responses
-  selection: z.union([
-    z.number(), // User selected by number: "1", "2", etc.
-    z.string(), // User selected by keyword: "books", "exercise"
-  ]).optional(),
+  selection: z
+    .union([
+      z.number(), // User selected by number: "1", "2", etc.
+      z.string(), // User selected by keyword: "books", "exercise"
+    ])
+    .optional(),
 
   // Context from previous interactions
-  pendingContext: z.object({
-    originalAction: z.string(),
-    goalOptions: z.array(z.object({
-      id: z.string(),
-      title: z.string(),
-      currentValue: z.number().optional(),
-      targetValue: z.number().optional(),
-    })).optional(),
-    pendingValue: z.number().optional(),
-  }).optional(),
+  pendingContext: z
+    .object({
+      originalAction: z.string(),
+      goalOptions: z
+        .array(
+          z.object({
+            id: z.string(),
+            title: z.string(),
+            currentValue: z.number().optional(),
+            targetValue: z.number().optional(),
+          })
+        )
+        .optional(),
+      pendingValue: z.number().optional(),
+    })
+    .optional(),
 
   // Metadata
   confidence: z.number().min(0).max(1).default(0.5),
@@ -89,26 +97,34 @@ export const GoalContextSchema = z.object({
   activeGoals: z.array(GoalOptionSchema).optional(),
 
   // Pending clarification
-  pendingClarification: z.object({
-    type: z.enum(['goal_selection', 'value_confirmation', 'action_confirmation']),
-    askedAt: z.string(),
-    options: z.array(GoalOptionSchema).optional(),
-    pendingValue: z.number().optional(),
-    originalMessage: z.string().optional(),
-  }).optional(),
+  pendingClarification: z
+    .object({
+      type: z.enum(['goal_selection', 'value_confirmation', 'action_confirmation']),
+      askedAt: z.string(),
+      options: z.array(GoalOptionSchema).optional(),
+      pendingValue: z.number().optional(),
+      originalMessage: z.string().optional(),
+    })
+    .optional(),
 
   // Recent progress entries
-  recentProgress: z.array(z.object({
-    goalId: z.string(),
-    value: z.number(),
-    loggedAt: z.string(),
-  })).optional(),
+  recentProgress: z
+    .array(
+      z.object({
+        goalId: z.string(),
+        value: z.number(),
+        loggedAt: z.string(),
+      })
+    )
+    .optional(),
 
   // User preferences learned over time
-  preferences: z.object({
-    defaultUnit: z.string().optional(),
-    preferredCategories: z.array(z.string()).optional(),
-  }).optional(),
+  preferences: z
+    .object({
+      defaultUnit: z.string().optional(),
+      preferredCategories: z.array(z.string()).optional(),
+    })
+    .optional(),
 });
 
 export type GoalContext = z.infer<typeof GoalContextSchema>;
@@ -133,7 +149,7 @@ export function isSelectionResponse(message: string): boolean {
 
   // Check for selection phrases
   const selectionPhrases = ['the first', 'the second', 'number', 'option'];
-  return selectionPhrases.some(phrase => lower.includes(phrase));
+  return selectionPhrases.some((phrase) => lower.includes(phrase));
 }
 
 /**
@@ -142,7 +158,7 @@ export function isSelectionResponse(message: string): boolean {
 export function parseSelection(
   message: string,
   options: GoalOption[]
-): { type: 'index' | 'keyword', value: number | string, goalId: string } | null {
+): { type: 'index' | 'keyword'; value: number | string; goalId: string } | null {
   const lower = message.toLowerCase().trim();
 
   // Try to parse as number
@@ -157,7 +173,7 @@ export function parseSelection(
 
   // Try ordinal words
   const ordinals = ['first', 'second', 'third', 'fourth', 'fifth'];
-  const ordinalIndex = ordinals.findIndex(o => lower.includes(o));
+  const ordinalIndex = ordinals.findIndex((o) => lower.includes(o));
   if (ordinalIndex >= 0 && ordinalIndex < options.length) {
     return {
       type: 'index',
@@ -168,8 +184,11 @@ export function parseSelection(
 
   // Try keyword matching
   for (let i = 0; i < options.length; i++) {
-    const keywords = options[i].title.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-    const matchingKeyword = keywords.find(k => lower.includes(k));
+    const keywords = options[i].title
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((w) => w.length > 3);
+    const matchingKeyword = keywords.find((k) => lower.includes(k));
     if (matchingKeyword) {
       return {
         type: 'keyword',
@@ -187,13 +206,13 @@ export function parseSelection(
  */
 export function getActionDescription(action: GoalData['action']): string {
   const descriptions: Record<GoalData['action'], string> = {
-    'set_goal': 'Setting a new goal',
-    'log_progress': 'Logging progress',
-    'view_goals': 'Viewing goals',
-    'check_progress': 'Checking progress',
-    'update_goal': 'Updating goal',
-    'goal_selected': 'Goal selection',
-    'clarification_response': 'Clarification provided',
+    set_goal: 'Setting a new goal',
+    log_progress: 'Logging progress',
+    view_goals: 'Viewing goals',
+    check_progress: 'Checking progress',
+    update_goal: 'Updating goal',
+    goal_selected: 'Goal selection',
+    clarification_response: 'Clarification provided',
   };
 
   return descriptions[action] || 'Unknown action';

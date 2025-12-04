@@ -9,24 +9,18 @@
 import { BaseExtractor } from '@/core/domains/base/BaseExtractor.js';
 import type { ExtractedData, ExtractionContext } from '@/core/domains/types.js';
 import { llmService } from '@/core/llm.service.js';
+import { agentStateService } from '@/services/agent-state.service.js';
 import { logger } from '@/core/logger.js';
-import {
-  GoalDataSchema,
-  type GoalData,
-  type GoalContext,
-} from '../schemas/goal.schema.js';
+import { GoalDataSchema, type GoalData, type GoalContext } from '../schemas/goal.schema.js';
 
 export class GoalExtractor extends BaseExtractor {
   domainId = 'goal';
   schema = GoalDataSchema;
 
   /**
-   * Extract progress-related data from user message
+   * Main extraction method
    */
-  async extract(
-    message: string,
-    context: ExtractionContext
-  ): Promise<ExtractedData | null> {
+  async extract(message: string, context: ExtractionContext): Promise<ExtractedData | null> {
     logger.info({ domainId: this.domainId, message }, 'GoalExtractor.extract called');
 
     try {
@@ -58,7 +52,7 @@ export class GoalExtractor extends BaseExtractor {
         domainId: this.domainId,
         timestamp: new Date(),
         data: validated,
-        confidence: validated.confidence,
+        confidence: validated.confidence || 0.5,
       };
     } catch (error) {
       logger.error({ error, domainId: this.domainId }, 'Failed to extract progress data');
@@ -73,16 +67,34 @@ export class GoalExtractor extends BaseExtractor {
     message: string,
     context: ExtractionContext
   ): Promise<ExtractedData | null> {
-    // Check if there's a pending clarification in domain context
-    const goalContext = context.domainContext as GoalContext;
-    if (!goalContext?.pendingClarification) return null;
+    // First check if we have a pending state in agent states
+    const conversationId = context.conversationId || context.userId || 'default';
+    const pendingState = await agentStateService.getState(
+      conversationId,
+      'goal',
+      'selection_pending'
+    );
 
-    const { type, options, pendingValue } = goalContext.pendingClarification;
+    if (pendingState) {
+      // We have a pending state! Use it to understand the selection
+      interface PendingGoalState {
+        goals: Array<{
+          index: number;
+          id: string;
+          title: string;
+          currentValue?: number | null;
+          targetValue?: number | null;
+          unit?: string | null;
+        }>;
+        pendingValue?: number;
+        originalMessage: string;
+        userId: string;
+      }
+      const { goals, pendingValue } = pendingState as PendingGoalState;
 
-    if (type === 'goal_selection' && options) {
       // Use LLM to understand if this is a selection and which goal was selected
       const selectionPrompt = `The user was asked to select from these goals:
-${options.map((g, i) => `${i + 1}. ${g.title}`).join('\n')}
+${goals.map((g, i) => `${i + 1}. ${g.title}`).join('\n')}
 
 The user responded: "${message}"
 
@@ -91,7 +103,6 @@ Return JSON with:
 {
   "isSelection": true/false,
   "selectedIndex": 1-based index or null,
-  "selectedGoalId": "goal id" or null,
   "confidence": 0-1
 }
 
@@ -126,35 +137,37 @@ If the message is not a selection response, return {"isSelection": false}.`;
 
         const result = JSON.parse(content);
 
-        if (result.isSelection && result.selectedGoalId) {
-          logger.info(
-            {
+        if (result.isSelection && result.selectedIndex) {
+          const selectedGoal = goals[result.selectedIndex - 1];
+          if (selectedGoal) {
+            logger.info(
+              {
+                domainId: this.domainId,
+                selectedIndex: result.selectedIndex,
+                goalId: selectedGoal.id,
+                message,
+              },
+              'Goal selection parsed via LLM with agent state'
+            );
+
+            const data: GoalData = {
+              action: 'goal_selected',
+              goalId: selectedGoal.id,
+              selection: String(result.selectedIndex),
+              progressValue: pendingValue,
+              confidence: result.confidence || 0.9,
+            };
+
+            // Resolve the agent state
+            await agentStateService.resolveState(conversationId, 'goal', 'selection_pending');
+
+            return {
               domainId: this.domainId,
-              selectedIndex: result.selectedIndex,
-              goalId: result.selectedGoalId,
-            },
-            'Goal selection parsed via LLM'
-          );
-
-          const data: GoalData = {
-            action: 'goal_selected',
-            goalId: result.selectedGoalId,
-            selection: result.selectedIndex || message,
-            pendingContext: {
-              originalAction: 'log_progress',
-              goalOptions: options,
-              pendingValue,
-            },
-            progressValue: pendingValue,
-            confidence: result.confidence || 0.9,
-          };
-
-          return {
-            domainId: this.domainId,
-            timestamp: new Date(),
-            data,
-            confidence: result.confidence || 0.9,
-          };
+              timestamp: new Date(),
+              data,
+              confidence: result.confidence || 0.9,
+            };
+          }
         }
       } catch (error) {
         logger.error({ error }, 'Failed to parse goal selection via LLM');
@@ -171,16 +184,14 @@ If the message is not a selection response, return {"isSelection": false}.`;
     message: string,
     context: ExtractionContext
   ): Promise<GoalData | null> {
-
     const prompt = this.buildExtractionPrompt(message, context);
 
     try {
-      // Use llmService.generateFromMessages like BaseExtractor does
       const content = await llmService.generateFromMessages(
         [
           {
             role: 'system',
-            content: prompt + '\n\nReturn your response as valid JSON matching the expected schema.',
+            content: prompt,
           },
           {
             role: 'user',
@@ -204,32 +215,8 @@ If the message is not a selection response, return {"isSelection": false}.`;
 
       return parsed as GoalData;
     } catch (error) {
-      logger.error({ error }, 'Failed to extract progress data via LLM');
+      logger.error({ error, message }, 'Failed to extract goal data using LLM');
       return null;
-    }
-  }
-
-  /**
-   * Validate and transform extracted data
-   */
-  protected validateAndTransform(data: any): ExtractedData {
-    try {
-      const validated = GoalDataSchema.parse(data);
-      return {
-        domainId: this.domainId,
-        timestamp: new Date(),
-        data: validated,
-        confidence: validated.confidence || 0.8,
-      };
-    } catch (error) {
-      logger.error({ error }, 'Failed to validate progress data');
-      // Return empty extraction with zero confidence
-      return {
-        domainId: this.domainId,
-        timestamp: new Date(),
-        data: {},
-        confidence: 0,
-      };
     }
   }
 
@@ -246,15 +233,22 @@ User message: "${message}"
 Recent conversation:
 ${context.recentMessages
   .slice(-3)
-  .map(m => `${m.role}: ${m.content}`)
+  .map((m) => `${m.role}: ${m.content}`)
   .join('\n')}
 
-${goalContext?.activeGoals ? `
+${
+  goalContext?.activeGoals
+    ? `
 Active goals:
 ${goalContext.activeGoals
-  .map((g, i) => `${i + 1}. ${g.title} (${g.currentValue || 0}/${g.targetValue || '?'} ${g.unit || ''})`)
+  .map(
+    (g, i) =>
+      `${i + 1}. ${g.title} (${g.currentValue || 0}/${g.targetValue || '?'} ${g.unit || ''})`
+  )
   .join('\n')}
-` : ''}
+`
+    : ''
+}
 
 Determine the action type:
 - set_goal: User wants to create/set a new goal (e.g., "I want to read 12 books", "My goal is to exercise more")
@@ -281,4 +275,17 @@ Examples:
 If the user is reporting progress but the goal is ambiguous (multiple possible goals), still extract with action="log_progress" but leave goalId empty.`;
   }
 
+  /**
+   * Validate and transform extracted data
+   * Note: This method is not used as we override the main extract method
+   */
+  protected validateAndTransform(data: unknown): ExtractedData {
+    const validated = this.schema.parse(data);
+    return {
+      domainId: this.domainId,
+      timestamp: new Date(),
+      data: validated,
+      confidence: (validated as GoalData).confidence || 0.5,
+    };
+  }
 }

@@ -157,7 +157,9 @@ export class ProgressRepository {
       return updated;
     } catch (error) {
       logger.error({ error, entryId: id, updates }, 'Failed to update progress entry');
-      throw error instanceof DatabaseError ? error : new DatabaseError(' update progress entry', error as Error);
+      throw error instanceof DatabaseError
+        ? error
+        : new DatabaseError(' update progress entry', error as Error);
     }
   }
 
@@ -249,7 +251,9 @@ export class ProgressRepository {
       return achieved;
     } catch (error) {
       logger.error({ error, milestoneId: id }, 'Failed to achieve milestone');
-      throw error instanceof DatabaseError ? error : new DatabaseError(' achieve milestone', error as Error);
+      throw error instanceof DatabaseError
+        ? error
+        : new DatabaseError(' achieve milestone', error as Error);
     }
   }
 
@@ -272,7 +276,7 @@ export class ProgressRepository {
 
       if (newlyAchieved.length > 0) {
         logger.info(
-          { goalId, count: newlyAchieved.length, milestones: newlyAchieved.map(m => m.title) },
+          { goalId, count: newlyAchieved.length, milestones: newlyAchieved.map((m) => m.title) },
           'Milestones achieved'
         );
       }
@@ -298,11 +302,7 @@ export class ProgressRepository {
     try {
       // Fetch goal if not provided
       if (!goal) {
-        const goalResult = await this.db
-          .select()
-          .from(goals)
-          .where(eq(goals.id, goalId))
-          .limit(1);
+        const goalResult = await this.db.select().from(goals).where(eq(goals.id, goalId)).limit(1);
 
         if (!goalResult[0]) {
           throw new DatabaseError('calculate stats', new Error('Goal not found'));
@@ -325,7 +325,7 @@ export class ProgressRepository {
       }
 
       // Calculate basic statistics
-      const values = entries.map(e => e.value);
+      const values = entries.map((e) => e.value);
       const totalEntries = entries.length;
       const averageValue = values.reduce((a, b) => a + b, 0) / totalEntries;
       const minValue = Math.min(...values);
@@ -349,7 +349,9 @@ export class ProgressRepository {
       };
     } catch (error) {
       logger.error({ error, goalId }, 'Failed to calculate progress stats');
-      throw error instanceof DatabaseError ? error : new DatabaseError(' calculate stats', error as Error);
+      throw error instanceof DatabaseError
+        ? error
+        : new DatabaseError(' calculate stats', error as Error);
     }
   }
 

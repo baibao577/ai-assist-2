@@ -2,6 +2,7 @@
 import { BaseClassifier } from './base.classifier.js';
 import { logger } from '@/core/logger.js';
 import { domainRegistry } from '@/core/domains/registries/index.js';
+import { agentStateRepository } from '@/database/repositories/index.js';
 import type { ConversationState } from '@/types/state.js';
 import type { DomainDefinition } from '@/core/domains/types.js';
 import type { ClassificationResult } from '@/types/classifiers.js';
@@ -59,18 +60,41 @@ export class DomainRelevanceClassifier extends BaseClassifier<
    */
   async classifyDomains(state: ConversationState): Promise<DomainDefinition[]> {
     const result = await this.classify(state);
+    const domainIds = [...result.domains];
+
+    // Check for pending agent states and add their domains
+    try {
+      const availableDomains = domainRegistry.getActiveDomains();
+      for (const domain of availableDomains) {
+        const pendingState = await agentStateRepository.getState(
+          state.conversationId,
+          domain.id,
+          'selection_pending'
+        );
+
+        if (pendingState && !domainIds.includes(domain.id)) {
+          logger.debug(
+            { domainId: domain.id, conversationId: state.conversationId },
+            'Adding domain due to pending agent state'
+          );
+          domainIds.push(domain.id);
+        }
+      }
+    } catch (error) {
+      logger.warn({ error }, 'Failed to check agent states');
+    }
 
     logger.debug(
       {
         messagePreview: state.messages?.[state.messages.length - 1]?.content.substring(0, 50),
         availableDomains: domainRegistry.getActiveDomains().map((d) => d.id),
-        relevantDomains: result.domains,
+        relevantDomains: domainIds,
       },
       'Domain classification complete'
     );
 
     // Map IDs back to domain definitions
-    return result.domains
+    return domainIds
       .map((id) => domainRegistry.getDomain(id))
       .filter(Boolean) as DomainDefinition[];
   }
