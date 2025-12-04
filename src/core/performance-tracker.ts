@@ -437,22 +437,42 @@ export class PerformanceTracker {
     }
 
     // LLM metrics
-    const llmMetrics = Array.from(this.metrics.entries())
-      .filter(([name]) => name.includes('llm') || name.includes('openai'));
+    // Get LLM spans with their attributes (including token usage)
+    const llmSpans = Array.from(this.spans.values()).filter(
+      (span) => span.name.includes('llm') || span.name.includes('openai')
+    );
 
-    if (llmMetrics.length > 0) {
+    if (llmSpans.length > 0) {
       output += 'LLM Call Details:\n';
-      let totalLLMCalls = 0;
-      let totalLLMDuration = 0;
 
-      llmMetrics.forEach(([_name, metrics]) => {
-        totalLLMCalls += metrics.length;
-        totalLLMDuration += metrics.reduce((sum, m) => sum + m.value, 0);
+      let totalTokens = 0;
+      let totalPromptTokens = 0;
+      let totalCompletionTokens = 0;
+      let totalDuration = 0;
+
+      llmSpans.forEach((span, index) => {
+        const attrs = span.attributes || {};
+        const duration = span.duration || 0;
+        const method = attrs.method || 'unknown';
+        const promptTokens = attrs.promptTokens || 0;
+        const completionTokens = attrs.completionTokens || 0;
+        const tokens = attrs.totalTokens || promptTokens + completionTokens;
+
+        totalDuration += duration;
+        totalPromptTokens += promptTokens;
+        totalCompletionTokens += completionTokens;
+        totalTokens += tokens;
+
+        output += `  ${index + 1}. ${method}: ${duration}ms`;
+        if (tokens > 0) {
+          output += ` (${promptTokens}→${completionTokens} tokens)`;
+        }
+        output += '\n';
       });
 
-      output += `- Total calls: ${totalLLMCalls}\n`;
-      if (totalLLMCalls > 0) {
-        output += `- Avg response time: ${Math.round(totalLLMDuration / totalLLMCalls)}ms\n`;
+      output += `- Total: ${llmSpans.length} calls, ${totalDuration}ms\n`;
+      if (totalTokens > 0) {
+        output += `- Tokens: ${totalPromptTokens} prompt + ${totalCompletionTokens} completion = ${totalTokens} total\n`;
       }
     }
 
