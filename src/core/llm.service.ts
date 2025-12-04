@@ -2,6 +2,7 @@
 import OpenAI from 'openai';
 import { config } from '@/config/index.js';
 import { logger } from '@/core/logger.js';
+import { performanceTracker } from './performance-tracker.js';
 import type { Message } from '@/types/index.js';
 
 export interface LLMOptions {
@@ -222,10 +223,30 @@ export class LLMService {
 
       let completion;
       try {
+        // Start performance tracking for API call
+        const llmSpan = performanceTracker.startSpan('llm.openai_api');
+        performanceTracker.setSpanAttributes(llmSpan, {
+          model: completionRequest.model,
+          messageCount: completionRequest.messages.length,
+          maxTokens: completionRequest.max_tokens,
+          temperature: completionRequest.temperature,
+          hasResponseFormat: !!completionRequest.response_format,
+        });
+
         const apiCallStart = Date.now();
         completion = await this.client.chat.completions.create(completionRequest);
+        const apiDuration = Date.now() - apiCallStart;
+
+        // End performance span with usage details
+        performanceTracker.endSpan(llmSpan, {
+          duration: apiDuration,
+          promptTokens: completion.usage?.prompt_tokens,
+          completionTokens: completion.usage?.completion_tokens,
+          totalTokens: completion.usage?.total_tokens,
+        });
+
         logger.debug(
-          { duration: Date.now() - apiCallStart },
+          { duration: apiDuration },
           'OpenAI API call completed successfully'
         );
       } catch (apiError: any) {

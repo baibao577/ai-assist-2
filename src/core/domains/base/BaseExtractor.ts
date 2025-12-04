@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { config } from '@/config/index.js';
 import { logger } from '@/core/logger.js';
 import { llmService } from '@/core/llm.service.js';
+import { performanceTracker } from '@/core/performance-tracker.js';
 import type { ExtractedData, ExtractionContext } from '../types.js';
 
 /**
@@ -22,6 +23,10 @@ export abstract class BaseExtractor {
   async extract(message: string, context: ExtractionContext): Promise<ExtractedData | null> {
     try {
       const startTime = Date.now();
+
+      // Start performance tracking for this extractor
+      const extractorSpan = performanceTracker.startSpan(`extractor.${this.domainId}`);
+
       const prompt = this.buildExtractionPrompt(message, context);
 
       // Verbose logging for debugging
@@ -156,10 +161,17 @@ export abstract class BaseExtractor {
           },
           'Extraction confidence too low'
         );
+        performanceTracker.endSpan(extractorSpan, { noDataExtracted: true });
         return null;
       }
 
       const duration = Date.now() - startTime;
+
+      // End performance span with extraction details
+      performanceTracker.endSpan(extractorSpan, {
+        fieldsExtracted: Object.keys(validation.data).length,
+        confidence: extractedData.confidence,
+      });
       const dataObj = validation.data as Record<string, any>;
 
       // Verbose logging of final result
