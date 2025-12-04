@@ -19,6 +19,7 @@ export class GoalExtractor extends BaseExtractor {
 
   /**
    * Main extraction method
+   * Checks for clarification responses first, then uses base class extraction
    */
   async extract(message: string, context: ExtractionContext): Promise<ExtractedData | null> {
     logger.info({ domainId: this.domainId, message }, 'GoalExtractor.extract called');
@@ -31,31 +32,10 @@ export class GoalExtractor extends BaseExtractor {
         return clarificationData;
       }
 
-      // Otherwise, extract new progress intent
-      const goalData = await this.extractGoalIntent(message, context);
-      logger.info({ domainId: this.domainId, goalData }, 'Goal intent extraction result');
-      if (!goalData) return null;
-
-      // Validate against schema
-      const validated = GoalDataSchema.parse(goalData);
-
-      logger.info(
-        {
-          domainId: this.domainId,
-          action: validated.action,
-          confidence: validated.confidence,
-        },
-        'Goal data extracted'
-      );
-
-      return {
-        domainId: this.domainId,
-        timestamp: new Date(),
-        data: validated,
-        confidence: validated.confidence || 0.5,
-      };
+      // Otherwise, use base class extraction which handles JSON formatting
+      return await super.extract(message, context);
     } catch (error) {
-      logger.error({ error, domainId: this.domainId }, 'Failed to extract progress data');
+      logger.error({ error, domainId: this.domainId }, 'Failed to extract goal data');
       return null;
     }
   }
@@ -199,111 +179,13 @@ If unsure or the message seems unrelated to goal selection, return JSON: {"isSel
   }
 
   /**
-   * Extract progress intent from message using LLM
-   */
-  private async extractGoalIntent(
-    message: string,
-    context: ExtractionContext
-  ): Promise<GoalData | null> {
-    const prompt = this.buildExtractionPrompt(message, context);
-    const startTime = Date.now();
-
-    logger.debug({ startTime, message }, 'Starting goal extraction LLM call');
-
-    try {
-      const content = await llmService.generateFromMessages(
-        [
-          {
-            role: 'system',
-            content: prompt,
-          },
-          {
-            role: 'user',
-            content: message,
-          },
-        ],
-        {
-          responseFormat: { type: 'json_object' },
-          temperature: 0.3,
-          maxTokens: 500,
-        }
-      );
-
-      logger.debug(
-        { duration: Date.now() - startTime },
-        'Goal extraction LLM call completed successfully'
-      );
-
-      if (!content) return null;
-
-      // Parse JSON response
-      const parsed = JSON.parse(content);
-
-      // Don't extract if action is null or confidence is too low
-      if (!parsed || !parsed.action || parsed.confidence < 0.3) {
-        logger.debug({ parsed, message }, 'No goal action detected or low confidence');
-        return null;
-      }
-
-      return parsed as GoalData;
-    } catch (error: any) {
-      const duration = Date.now() - startTime;
-
-      // Create comprehensive error details
-      const errorDetails: any = {
-        duration,
-        errorType: error?.constructor?.name,
-        errorMessage: error instanceof Error ? error.message : String(error),
-        errorStack: error instanceof Error ? error.stack : undefined,
-        errorString: String(error),
-        errorProps: {},
-        message,
-      };
-
-      // Capture all enumerable properties
-      if (error && typeof error === 'object') {
-        for (const key of Object.keys(error)) {
-          try {
-            errorDetails.errorProps[key] = error[key];
-          } catch (e) {
-            errorDetails.errorProps[key] = '<unable to serialize>';
-          }
-        }
-      }
-
-      // Try to get more error info using Object.getOwnPropertyNames
-      if (error && typeof error === 'object') {
-        const allProps = Object.getOwnPropertyNames(error);
-        errorDetails.allPropertyNames = allProps;
-        for (const prop of allProps) {
-          if (!errorDetails.errorProps[prop]) {
-            try {
-              errorDetails.errorProps[prop] = error[prop];
-            } catch (e) {
-              errorDetails.errorProps[prop] = '<unable to access>';
-            }
-          }
-        }
-      }
-
-      // Log detailed error
-      if (error instanceof SyntaxError) {
-        logger.error(errorDetails, 'Failed to parse JSON from LLM response - detailed');
-      } else {
-        logger.error(errorDetails, 'Failed to extract goal data using LLM - detailed');
-      }
-
-      return null;
-    }
-  }
-
-  /**
    * Build extraction prompt for LLM
+   * The base class will add the JSON formatting instructions
    */
   protected buildExtractionPrompt(message: string, context: ExtractionContext): string {
     const goalContext = context.domainContext as GoalContext;
 
-    return `Extract goal and progress tracking information from this message and return a valid JSON object.
+    return `Extract goal and progress tracking information from this message.
 
 User message: "${message}"
 
@@ -355,9 +237,9 @@ Extract relevant details:
 - For check_progress: goalId (if specific goal mentioned)
 - For update_goal: goalId, new values
 
-Return ONLY a valid JSON object. If the message is NOT related to goals/progress, return: {"action": null, "confidence": 0}
+If the message is NOT related to goals/progress, return: {"action": null, "confidence": 0}
 
-Examples (all responses must be valid JSON):
+Examples:
 - "I want to set a goal to read 12 books this year" → {"action": "set_goal", "goalTitle": "Read 12 books this year", "targetValue": 12, "progressUnit": "books", "confidence": 0.95}
 - "I want to track my goal of reading 20 books, how does it work?" → {"action": "check_progress", "confidence": 0.7} (asking about tracking, not setting)
 - "Can you help me track my reading progress?" → {"action": null, "confidence": 0} (just asking for help)
@@ -369,7 +251,7 @@ If the user is reporting progress but the goal is ambiguous (multiple possible g
 
   /**
    * Validate and transform extracted data
-   * Note: This method is not used as we override the main extract method
+   * Override to handle GoalData confidence field
    */
   protected validateAndTransform(data: unknown): ExtractedData {
     const validated = this.schema.parse(data);
