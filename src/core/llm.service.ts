@@ -99,11 +99,30 @@ export class LLMService {
         );
       }
 
+      // Performance tracking for handler LLM calls
+      const llmSpan = performanceTracker.startSpan('llm.openai_api');
+      performanceTracker.setSpanAttributes(llmSpan, {
+        model: options?.model || config.openai.model,
+        messageCount: openAIMessages.length,
+        maxTokens: options?.maxTokens || config.openai.maxTokens,
+        temperature: options?.temperature ?? config.openai.temperature,
+        method: 'generateResponse',
+      });
+
+      const apiCallStart = Date.now();
       const completion = await this.client.chat.completions.create({
         model: options?.model || config.openai.model,
         messages: openAIMessages,
         max_tokens: options?.maxTokens || config.openai.maxTokens,
         temperature: options?.temperature ?? config.openai.temperature,
+      });
+      const apiDuration = Date.now() - apiCallStart;
+
+      performanceTracker.endSpan(llmSpan, {
+        duration: apiDuration,
+        promptTokens: completion.usage?.prompt_tokens,
+        completionTokens: completion.usage?.completion_tokens,
+        totalTokens: completion.usage?.total_tokens,
       });
 
       const response = completion.choices[0]?.message?.content ?? '';
