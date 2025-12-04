@@ -268,8 +268,11 @@ Return JSON: { "compatible": true/false, "reasoning": "brief explanation" }`;
   getRecommendedCombination(result: MultiIntentResult): ConversationMode[] {
     const modes: ConversationMode[] = [result.primary.mode];
 
+    // Only include secondary modes with high confidence (raised threshold for performance)
+    const highConfidenceSecondary = result.secondary.filter((s) => s.confidence > 0.7);
+
     // Add compatible secondary modes
-    for (const secondary of result.secondary) {
+    for (const secondary of highConfidenceSecondary) {
       if (modes.every((mode) => this.areModesCompatible(mode, secondary.mode))) {
         modes.push(secondary.mode);
       }
@@ -279,6 +282,38 @@ Return JSON: { "compatible": true/false, "reasoning": "brief explanation" }`;
     }
 
     return modes;
+  }
+
+  /**
+   * Determine if orchestration is worth the performance cost
+   * Only orchestrate if we have high-confidence secondary intents
+   */
+  shouldOrchestrate(result: MultiIntentResult): boolean {
+    // Don't orchestrate if explicitly not required
+    if (!result.requiresOrchestration) {
+      return false;
+    }
+
+    // Don't orchestrate if no secondary intents
+    if (result.secondary.length === 0) {
+      return false;
+    }
+
+    // Only orchestrate if at least one secondary intent has high confidence
+    const hasHighConfidenceSecondary = result.secondary.some((s) => s.confidence > 0.7);
+
+    if (!hasHighConfidenceSecondary) {
+      logger.debug(
+        {
+          primaryMode: result.primary.mode,
+          secondaryModes: result.secondary.map((s) => ({ mode: s.mode, confidence: s.confidence })),
+        },
+        'Skipping orchestration due to low secondary intent confidence'
+      );
+      return false;
+    }
+
+    return true;
   }
 
   /**

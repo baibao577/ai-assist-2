@@ -351,7 +351,7 @@ export class ProgressRepository {
       logger.error({ error, goalId }, 'Failed to calculate progress stats');
       throw error instanceof DatabaseError
         ? error
-        : new DatabaseError(' calculate stats', error as Error);
+        : new DatabaseError('Failed to calculate stats', error as Error);
     }
   }
 

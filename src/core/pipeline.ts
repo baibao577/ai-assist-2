@@ -154,7 +154,10 @@ export class Pipeline {
 
       let handlerResult: { response: string; stateUpdates?: any };
 
-      if (multiIntentResult.requiresOrchestration) {
+      // Use smart orchestration decision for better performance
+      const shouldOrchestrate = multiIntentClassifier.shouldOrchestrate(multiIntentResult);
+
+      if (shouldOrchestrate) {
         // Use orchestrator for multi-mode responses
         logger.info(
           {

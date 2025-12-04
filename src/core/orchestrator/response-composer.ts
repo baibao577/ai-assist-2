@@ -20,7 +20,7 @@ export class ResponseComposer implements TransitionLibrary {
     this.config = {
       enableTransitions: true,
       enableDeduplication: true,
-      useLLMTransitions: true, // Use LLM by default
+      useLLMTransitions: false, // Disable LLM transitions for performance
       ...config,
     };
   }

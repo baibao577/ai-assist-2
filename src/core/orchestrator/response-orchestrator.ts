@@ -80,6 +80,49 @@ export class ResponseOrchestrator {
       // Step 3: Generate segments from selected modes
       const segments = await this.generateSegments(context, handlers, selectedModes);
 
+      // Critical: Handle empty segments
+      if (segments.length === 0) {
+        logger.warn({ selectedModes }, 'No segments generated, using fallback');
+
+        // Fallback to primary mode handler
+        const primaryHandler = handlers.get(multiIntent.primary.mode);
+        if (primaryHandler) {
+          try {
+            const result = await primaryHandler.handle(context);
+            return {
+              response: result.response || "I'm here to help. Could you tell me more?",
+              segments: [],
+              modesUsed: [multiIntent.primary.mode],
+              primaryMode: multiIntent.primary.mode,
+              metadata: {
+                compositionTime: Date.now() - startTime,
+                segmentCount: 0,
+                transitionsAdded: false,
+                warnings: ['No segments generated, used fallback'],
+              },
+              stateUpdates: result.stateUpdates,
+            };
+          } catch (fallbackError) {
+            logger.error({ fallbackError }, 'Fallback handler also failed');
+          }
+        }
+
+        // Ultimate fallback
+        return {
+          response: "I understand what you're asking. Let me help you with that.",
+          segments: [],
+          modesUsed: [multiIntent.primary.mode],
+          primaryMode: multiIntent.primary.mode,
+          metadata: {
+            compositionTime: Date.now() - startTime,
+            segmentCount: 0,
+            transitionsAdded: false,
+            warnings: ['No segments generated, used default fallback'],
+          },
+          stateUpdates: {},
+        };
+      }
+
       // Step 4: Compose final response (now async)
       const composedResponse = await this.composer.compose(segments);
 
