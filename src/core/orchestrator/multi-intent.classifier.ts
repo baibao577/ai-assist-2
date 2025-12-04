@@ -48,9 +48,7 @@ export class MultiIntentClassifier {
    */
   private buildModeDescriptions(): string {
     const modes = this.getAvailableModes();
-    return modes
-      .map(mode => `- ${mode.key}: ${mode.description}`)
-      .join('\n');
+    return modes.map((mode) => `- ${mode.key}: ${mode.description}`).join('\n');
   }
 
   /**
@@ -118,11 +116,13 @@ export class MultiIntentClassifier {
   private buildClassificationPrompt(message: string, state: ConversationState): string {
     const recentMessages = (state.messages || [])
       .slice(-3)
-      .map(m => `${m.role}: ${m.content}`)
+      .map((m) => `${m.role}: ${m.content}`)
       .join('\n');
 
     const modeDescriptions = this.buildModeDescriptions();
-    const availableModes = this.getAvailableModes().map(m => m.key).join('|');
+    const availableModes = this.getAvailableModes()
+      .map((m) => m.key)
+      .join('|');
 
     return `You are a multi-intent classifier for a conversational AI system.
 Analyze the user's message to detect ALL intents present and map them to conversation modes.
@@ -199,7 +199,7 @@ Rules:
    */
   hasMultipleIntents(result: MultiIntentResult): boolean {
     // Multiple intents if we have secondary intents with reasonable confidence
-    return result.secondary.some(intent => intent.confidence > 0.5);
+    return result.secondary.some((intent) => intent.confidence > 0.5);
   }
 
   /**
@@ -208,7 +208,7 @@ Rules:
   filterByConfidence(result: MultiIntentResult, threshold = 0.4): MultiIntentResult {
     return {
       ...result,
-      secondary: result.secondary.filter(intent => intent.confidence >= threshold),
+      secondary: result.secondary.filter((intent) => intent.confidence >= threshold),
     };
   }
 
@@ -270,7 +270,7 @@ Return JSON: { "compatible": true/false, "reasoning": "brief explanation" }`;
 
     // Add compatible secondary modes
     for (const secondary of result.secondary) {
-      if (modes.every(mode => this.areModesCompatible(mode, secondary.mode))) {
+      if (modes.every((mode) => this.areModesCompatible(mode, secondary.mode))) {
         modes.push(secondary.mode);
       }
 

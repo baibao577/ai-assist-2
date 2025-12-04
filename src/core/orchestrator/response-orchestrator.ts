@@ -40,9 +40,7 @@ export class ResponseOrchestrator {
     });
 
     this.cooperationRules = {
-      incompatiblePairs: [
-        [ConversationMode.META, ConversationMode.SMALLTALK],
-      ],
+      incompatiblePairs: [[ConversationMode.META, ConversationMode.SMALLTALK]],
       preferredOrder: [
         ConversationMode.SMALLTALK,
         ConversationMode.TRACK_PROGRESS,
@@ -105,11 +103,7 @@ export class ResponseOrchestrator {
       logger.error({ error }, 'Orchestration failed');
 
       // Fallback to primary mode
-      return this.handleSingleMode(
-        context,
-        handlers,
-        ConversationMode.CONSULT
-      );
+      return this.handleSingleMode(context, handlers, ConversationMode.CONSULT);
     }
   }
 
@@ -153,12 +147,11 @@ export class ResponseOrchestrator {
 
     for (const mode of modes) {
       // Check if mode is compatible with already selected modes
-      const isCompatible = filtered.every(existingMode =>
-        !this.cooperationRules.incompatiblePairs.some(
-          ([a, b]) =>
-            (mode === a && existingMode === b) ||
-            (mode === b && existingMode === a)
-        )
+      const isCompatible = filtered.every(
+        (existingMode) =>
+          !this.cooperationRules.incompatiblePairs.some(
+            ([a, b]) => (mode === a && existingMode === b) || (mode === b && existingMode === a)
+          )
       );
 
       if (isCompatible) {
@@ -184,27 +177,23 @@ export class ResponseOrchestrator {
   ): Promise<ModeSegment[]> {
     if (this.config.parallelExecution) {
       // Generate segments in parallel
-      const segmentPromises = modes.map(mode =>
+      const segmentPromises = modes.map((mode) =>
         this.generateSegmentWithTimeout(context, handlers.get(mode)!, mode)
       );
 
       const results = await Promise.allSettled(segmentPromises);
 
       return results
-        .filter(result => result.status === 'fulfilled')
-        .map(result => (result as PromiseFulfilledResult<ModeSegment>).value)
-        .filter(segment => segment.content.trim().length > 0);
+        .filter((result) => result.status === 'fulfilled')
+        .map((result) => (result as PromiseFulfilledResult<ModeSegment>).value)
+        .filter((segment) => segment.content.trim().length > 0);
     } else {
       // Generate segments sequentially
       const segments: ModeSegment[] = [];
 
       for (const mode of modes) {
         try {
-          const segment = await this.generateSegmentWithTimeout(
-            context,
-            handlers.get(mode)!,
-            mode
-          );
+          const segment = await this.generateSegmentWithTimeout(context, handlers.get(mode)!, mode);
           if (segment.content.trim().length > 0) {
             segments.push(segment);
           }
@@ -280,8 +269,12 @@ export class ResponseOrchestrator {
     const lowerResponse = response.toLowerCase();
 
     // Check for greetings
-    if (lowerResponse.includes('hello') || lowerResponse.includes('hi ') ||
-        lowerResponse.includes('good morning') || lowerResponse.includes('good evening')) {
+    if (
+      lowerResponse.includes('hello') ||
+      lowerResponse.includes('hi ') ||
+      lowerResponse.includes('good morning') ||
+      lowerResponse.includes('good evening')
+    ) {
       return 'greeting';
     }
 
@@ -291,14 +284,22 @@ export class ResponseOrchestrator {
     }
 
     // Check for analytics/data
-    if (lowerResponse.includes('progress') || lowerResponse.includes('goal') ||
-        lowerResponse.includes('metric') || lowerResponse.includes('%')) {
+    if (
+      lowerResponse.includes('progress') ||
+      lowerResponse.includes('goal') ||
+      lowerResponse.includes('metric') ||
+      lowerResponse.includes('%')
+    ) {
       return 'analytics';
     }
 
     // Check for advice
-    if (lowerResponse.includes('should') || lowerResponse.includes('recommend') ||
-        lowerResponse.includes('suggest') || lowerResponse.includes('try')) {
+    if (
+      lowerResponse.includes('should') ||
+      lowerResponse.includes('recommend') ||
+      lowerResponse.includes('suggest') ||
+      lowerResponse.includes('try')
+    ) {
       return 'advice';
     }
 
@@ -319,7 +320,9 @@ export class ResponseOrchestrator {
   private getModePriority(mode: ConversationMode): number {
     // Dynamic priority based on mode enum order
     const modeKeys = Object.keys(ConversationMode);
-    const modeIndex = modeKeys.findIndex(key => ConversationMode[key as keyof typeof ConversationMode] === mode);
+    const modeIndex = modeKeys.findIndex(
+      (key) => ConversationMode[key as keyof typeof ConversationMode] === mode
+    );
 
     // Higher priority for modes that appear earlier
     // Scale from 100 (first) to 50 (last)
@@ -327,7 +330,7 @@ export class ResponseOrchestrator {
     const minPriority = 50;
     const step = (maxPriority - minPriority) / Math.max(modeKeys.length - 1, 1);
 
-    return Math.round(maxPriority - (modeIndex * step));
+    return Math.round(maxPriority - modeIndex * step);
   }
 
   /**
@@ -382,12 +385,12 @@ export class ResponseOrchestrator {
     const warnings: string[] = [];
 
     // Check for empty segments
-    if (segments.some(s => !s.content.trim())) {
+    if (segments.some((s) => !s.content.trim())) {
       warnings.push('Empty segments detected');
     }
 
     // Check for duplicate modes
-    const modes = segments.map(s => s.mode);
+    const modes = segments.map((s) => s.mode);
     const uniqueModes = new Set(modes);
     if (modes.length !== uniqueModes.size) {
       warnings.push('Duplicate mode segments');
@@ -395,7 +398,7 @@ export class ResponseOrchestrator {
 
     // Check segment count limits
     for (const [mode, maxSegments] of this.cooperationRules.maxSegmentsPerMode) {
-      const count = segments.filter(s => s.mode === mode).length;
+      const count = segments.filter((s) => s.mode === mode).length;
       if (count > maxSegments) {
         warnings.push(`Mode ${mode} exceeds segment limit`);
       }

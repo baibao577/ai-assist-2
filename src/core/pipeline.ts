@@ -147,7 +147,10 @@ export class Pipeline {
       // Stage 5: Handle message - check for multi-intent and orchestrate if needed
 
       // Check for multi-intent after enrichment
-      const multiIntentResult = await multiIntentClassifier.classify(context.message, enrichedState);
+      const multiIntentResult = await multiIntentClassifier.classify(
+        context.message,
+        enrichedState
+      );
 
       let handlerResult: { response: string; stateUpdates?: any };
 
@@ -157,7 +160,7 @@ export class Pipeline {
           {
             conversationId: conversation.id,
             primaryMode: multiIntentResult.primary.mode,
-            secondaryModes: multiIntentResult.secondary.map(m => m.mode),
+            secondaryModes: multiIntentResult.secondary.map((m) => m.mode),
             strategy: multiIntentResult.compositionStrategy,
           },
           'Handler stage: Multi-intent detected, using orchestrator'

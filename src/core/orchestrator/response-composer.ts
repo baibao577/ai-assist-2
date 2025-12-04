@@ -58,7 +58,7 @@ export class ResponseComposer implements TransitionLibrary {
     // Step 3: Add transitions if enabled
     const composed = this.config.enableTransitions
       ? await this.addTransitions(deduplicated)
-      : deduplicated.map(s => s.content);
+      : deduplicated.map((s) => s.content);
 
     // Step 4: Join with appropriate spacing
     return this.joinSegments(composed);
@@ -117,13 +117,13 @@ export class ResponseComposer implements TransitionLibrary {
       const phrases = this.extractKeyPhrases(segment.content);
 
       // Check for significant overlap
-      const overlap = phrases.filter(p => seenPhrases.has(p)).length;
+      const overlap = phrases.filter((p) => seenPhrases.has(p)).length;
       const overlapRatio = overlap / Math.max(phrases.length, 1);
 
       // Include segment if overlap is less than 30%
       if (overlapRatio < 0.3) {
         deduplicated.push(segment);
-        phrases.forEach(p => seenPhrases.add(p));
+        phrases.forEach((p) => seenPhrases.add(p));
       } else {
         logger.debug(
           { mode: segment.mode, overlap: overlapRatio },
@@ -142,8 +142,8 @@ export class ResponseComposer implements TransitionLibrary {
     // Simple phrase extraction - split by sentences and normalize
     return content
       .split(/[.!?]/)
-      .map(s => s.trim().toLowerCase())
-      .filter(s => s.length > 10); // Only consider substantial phrases
+      .map((s) => s.trim().toLowerCase())
+      .filter((s) => s.length > 10); // Only consider substantial phrases
   }
 
   /**
@@ -163,7 +163,12 @@ export class ResponseComposer implements TransitionLibrary {
         const nextSegment = segments[i + 1];
 
         if (await this.needsTransition(segment, nextSegment)) {
-          const transition = await this.getTransition(segment.contentType, nextSegment.contentType, segment, nextSegment);
+          const transition = await this.getTransition(
+            segment.contentType,
+            nextSegment.contentType,
+            segment,
+            nextSegment
+          );
           if (transition) {
             result.push(transition);
           }
@@ -229,12 +234,7 @@ Generate a transition that fits the specific content and context above.`;
    * Get simple fallback transition
    */
   private getSimpleTransition(): string {
-    const fallbacks = [
-      'Additionally,',
-      'Also,',
-      'Furthermore,',
-      'Moreover,',
-    ];
+    const fallbacks = ['Additionally,', 'Also,', 'Furthermore,', 'Moreover,'];
     return fallbacks[Math.floor(Math.random() * fallbacks.length)];
   }
 
@@ -273,7 +273,7 @@ Generate a transition that fits the specific content and context above.`;
     // No transition if second segment starts with a connector
     const connectors = ['however', 'but', 'also', 'additionally', 'furthermore', 'moreover'];
     const toStart = to.content.trim().toLowerCase();
-    if (connectors.some(c => toStart.startsWith(c))) {
+    if (connectors.some((c) => toStart.startsWith(c))) {
       return false;
     }
 
@@ -326,8 +326,7 @@ Return JSON: { "needsTransition": true/false }`;
       if (!segment) continue;
 
       // Check if this is a transition phrase
-      const isTransition = segment.length < 30 &&
-        (segment.endsWith(',') || segment.endsWith(':'));
+      const isTransition = segment.length < 30 && (segment.endsWith(',') || segment.endsWith(':'));
 
       if (isTransition && i > 0) {
         // Append transition to previous segment
@@ -354,7 +353,7 @@ Return JSON: { "needsTransition": true/false }`;
     const issues: string[] = [];
 
     // Check for empty segments
-    const emptySegments = segments.filter(s => !s.content.trim());
+    const emptySegments = segments.filter((s) => !s.content.trim());
     if (emptySegments.length > 0) {
       issues.push(`${emptySegments.length} empty segments found`);
     }
@@ -366,8 +365,8 @@ Return JSON: { "needsTransition": true/false }`;
     }
 
     // Check for conflicting content types
-    const hasGreeting = segments.some(s => s.contentType === 'greeting');
-    const hasQuestion = segments.some(s => s.contentType === 'question');
+    const hasGreeting = segments.some((s) => s.contentType === 'greeting');
+    const hasQuestion = segments.some((s) => s.contentType === 'question');
     if (hasGreeting && hasQuestion) {
       issues.push('Response contains both greeting and question - may feel disjointed');
     }

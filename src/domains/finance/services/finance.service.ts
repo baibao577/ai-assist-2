@@ -36,10 +36,11 @@ export class FinanceService {
     ];
 
     // If ambiguous (e.g., user didn't specify account), ask for clarification
-    if (!description.toLowerCase().includes('checking') &&
-        !description.toLowerCase().includes('savings') &&
-        !description.toLowerCase().includes('credit')) {
-
+    if (
+      !description.toLowerCase().includes('checking') &&
+      !description.toLowerCase().includes('savings') &&
+      !description.toLowerCase().includes('credit')
+    ) {
       if (conversationId) {
         // Save state for later resolution
         const stateData = {
