@@ -13,16 +13,18 @@ import { z } from 'zod';
 // ============================================================================
 
 export const GoalDataSchema = z.object({
-  // Action type - what the user wants to do
-  action: z.enum([
-    'set_goal',
-    'log_progress',
-    'view_goals',
-    'check_progress',
-    'update_goal',
-    'goal_selected', // Special: user selected a goal from list
-    'clarification_response', // Special: user provided clarification
-  ]),
+  // Action type - what the user wants to do (null when no goal action detected)
+  action: z
+    .enum([
+      'set_goal',
+      'log_progress',
+      'view_goals',
+      'check_progress',
+      'update_goal',
+      'goal_selected', // Special: user selected a goal from list
+      'clarification_response', // Special: user provided clarification
+    ])
+    .nullable(),
 
   // Goal information
   goalId: z.string().optional(),
@@ -205,7 +207,11 @@ export function parseSelection(
  * Get action description for logging
  */
 export function getActionDescription(action: GoalData['action']): string {
-  const descriptions: Record<GoalData['action'], string> = {
+  if (action === null) {
+    return 'No goal action detected';
+  }
+
+  const descriptions: Record<NonNullable<GoalData['action']>, string> = {
     set_goal: 'Setting a new goal',
     log_progress: 'Logging progress',
     view_goals: 'Viewing goals',
