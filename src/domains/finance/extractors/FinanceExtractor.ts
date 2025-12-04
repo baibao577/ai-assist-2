@@ -2,6 +2,9 @@
 import { BaseExtractor } from '@/core/domains/base/BaseExtractor.js';
 import { financeExtractionSchema, type FinanceData } from '../schemas/finance.schema.js';
 import type { ExtractedData, ExtractionContext } from '@/core/domains/types.js';
+import { agentStateService } from '@/services/agent-state.service.js';
+import { llmService } from '@/core/llm.service.js';
+import { logger } from '@/core/logger.js';
 
 /**
  * Extractor for financial information
@@ -10,6 +13,171 @@ import type { ExtractedData, ExtractionContext } from '@/core/domains/types.js';
 export class FinanceExtractor extends BaseExtractor {
   domainId = 'finance';
   schema = financeExtractionSchema;
+
+  /**
+   * Main extraction method - check for pending states first
+   */
+  async extract(message: string, context: ExtractionContext): Promise<ExtractedData | null> {
+    logger.info({ domainId: this.domainId, message }, 'FinanceExtractor.extract called');
+
+    try {
+      // First, check if this is a response to an account clarification
+      const clarificationData = await this.checkForAccountSelection(message, context);
+      if (clarificationData) {
+        logger.info({ domainId: this.domainId }, 'Account selection response detected');
+        return clarificationData;
+      }
+
+      // Otherwise, extract using base class logic
+      return await super.extract(message, context);
+    } catch (error) {
+      logger.error({ error, domainId: this.domainId }, 'Failed to extract finance data');
+      return null;
+    }
+  }
+
+  /**
+   * Check if message is a response to pending account selection
+   */
+  private async checkForAccountSelection(
+    message: string,
+    context: ExtractionContext
+  ): Promise<ExtractedData | null> {
+    const conversationId = context.conversationId || context.userId || 'default';
+    const pendingState = await agentStateService.getState(
+      conversationId,
+      'finance',
+      'account_selection_pending'
+    );
+
+    if (pendingState) {
+      interface PendingAccountState {
+        accounts: Array<{
+          index: number;
+          id: string;
+          name: string;
+          balance: number;
+        }>;
+        pendingAmount: number;
+        pendingDescription: string;
+        userId: string;
+      }
+      const { accounts, pendingAmount, pendingDescription } = pendingState as PendingAccountState;
+
+      // Use LLM to understand if this is an account selection
+      const selectionPrompt = `The user was asked about ACCOUNT SELECTION with this prompt:
+"💰 **Account Selection Required**
+Which account is this transaction for?
+${accounts.map((a) => `${a.index}. ${a.name} (Balance: $${a.balance})`).join('\n')}
+
+Transaction amount: $${pendingAmount}
+Please respond with the number or account name."
+
+The user responded: "${message}"
+
+${
+  context.recentMessages?.length > 0
+    ? `Recent conversation context:
+${context.recentMessages
+  .slice(-2)
+  .map((m) => `${m.role}: ${m.content.substring(0, 100)}`)
+  .join('\n')}`
+    : ''
+}
+
+Determine if this response is answering the ACCOUNT SELECTION question above.
+Consider:
+- Is the response a number/selection that makes sense for these specific accounts?
+- Does the context suggest they're answering this finance question vs something else?
+- Could this be a response to a different domain's question (e.g., goals, health)?
+
+Return JSON with:
+{
+  "isSelection": true/false,
+  "selectedIndex": 1-based index or null,
+  "confidence": 0-1,
+  "reasoning": "brief explanation"
+}`;
+
+      try {
+        const content = await llmService.generateFromMessages(
+          [
+            {
+              role: 'system',
+              content: selectionPrompt,
+            },
+            {
+              role: 'user',
+              content: message,
+            },
+          ],
+          {
+            responseFormat: { type: 'json_object' },
+            temperature: 0.2,
+            maxTokens: 200,
+          }
+        );
+
+        if (!content) return null;
+
+        const result = JSON.parse(content);
+
+        if (result.isSelection && result.selectedIndex) {
+          const selectedAccount = accounts.find((a) => a.index === result.selectedIndex);
+          if (selectedAccount) {
+            logger.info(
+              {
+                domainId: this.domainId,
+                selectedIndex: result.selectedIndex,
+                accountId: selectedAccount.id,
+                message,
+              },
+              'Account selection parsed via LLM'
+            );
+
+            // Create a transaction with the selected account
+            const data: FinanceData = {
+              transactions: [
+                {
+                  type: pendingAmount < 0 ? 'expense' : 'income',
+                  amount: Math.abs(pendingAmount),
+                  currency: 'USD',
+                  description: `${pendingDescription} (${selectedAccount.name})`,
+                  category: null,
+                  date: new Date().toISOString(),
+                },
+              ],
+              selectedAccountId: selectedAccount.id,
+              budget: null,
+              goals: null,
+              investments: null,
+              debt: null,
+              concerns: null,
+              income: null,
+            };
+
+            // Resolve the agent state
+            await agentStateService.resolveState(
+              conversationId,
+              'finance',
+              'account_selection_pending'
+            );
+
+            return {
+              domainId: this.domainId,
+              timestamp: new Date(),
+              data,
+              confidence: result.confidence || 0.9,
+            };
+          }
+        }
+      } catch (error) {
+        logger.error({ error }, 'Failed to parse account selection via LLM');
+      }
+    }
+
+    return null;
+  }
 
   /**
    * Build the extraction prompt for finance data

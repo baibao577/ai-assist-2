@@ -133,6 +133,13 @@ export const financeExtractionSchema = z.object({
     .nullable()
     .optional()
     .describe('Income information'),
+
+  // Selected account ID (from agent state resolution)
+  selectedAccountId: z
+    .string()
+    .nullable()
+    .optional()
+    .describe('Account ID selected from clarification'),
 });
 
 /**

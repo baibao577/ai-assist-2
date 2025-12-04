@@ -93,26 +93,47 @@ export class GoalExtractor extends BaseExtractor {
       const { goals, pendingValue } = pendingState as PendingGoalState;
 
       // Use LLM to understand if this is a selection and which goal was selected
-      const selectionPrompt = `The user was asked to select from these goals:
+      const selectionPrompt = `The user was asked about GOAL SELECTION with this prompt:
+"📊 **Goal Selection Required**
+Which goal is this progress for?
 ${goals.map((g, i) => `${i + 1}. ${g.title}`).join('\n')}
+
+Progress to log: ${pendingValue}
+Please respond with the number or a keyword from the goal."
 
 The user responded: "${message}"
 
-Determine if this is a selection response and which goal was selected.
+${
+  context.recentMessages?.length > 0
+    ? `Recent conversation context:
+${context.recentMessages
+  .slice(-2)
+  .map((m) => `${m.role}: ${m.content.substring(0, 100)}`)
+  .join('\n')}`
+    : ''
+}
+
+Determine if this response is answering the GOAL SELECTION question above.
+Consider:
+- Is the response a number/selection that makes sense for these specific goals?
+- Does the context suggest they're answering this goal question vs something else?
+- Could this be a response to a different domain's question (e.g., finance, health)?
+
 Return JSON with:
 {
   "isSelection": true/false,
   "selectedIndex": 1-based index or null,
-  "confidence": 0-1
+  "confidence": 0-1,
+  "reasoning": "brief explanation"
 }
 
 Examples of selection responses:
-- "1" or "2" → selecting by number
+- "1" or "2" → selecting by number (IF in context of goal selection)
 - "first" or "second" → selecting by position
 - "books" or "exercise" → selecting by keyword from goal title
 - "the reading one" → selecting by description
 
-If the message is not a selection response, return {"isSelection": false}.`;
+If unsure or the message seems unrelated to goal selection, return {"isSelection": false, "reasoning": "why not"}.`;
 
       try {
         const content = await llmService.generateFromMessages(

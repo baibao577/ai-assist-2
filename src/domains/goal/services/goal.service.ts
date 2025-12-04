@@ -528,7 +528,8 @@ Well done on reaching this milestone! 🏆`;
   }
 
   private formatGoalSelectionPrompt(goals: Goal[], pendingValue: number): string {
-    const lines = ['Which goal is this progress for?'];
+    const lines = ['📊 **Goal Selection Required**'];
+    lines.push('Which goal is this progress for?');
 
     goals.forEach((goal, index) => {
       const current = goal.currentValue || 0;
