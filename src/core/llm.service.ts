@@ -16,6 +16,18 @@ export class LLMService {
   private client: OpenAI;
 
   constructor() {
+    // Log initialization details
+    logger.info(
+      {
+        hasApiKey: !!config.openai.apiKey,
+        apiKeyLength: config.openai.apiKey?.length,
+        apiKeyPrefix: config.openai.apiKey?.substring(0, 7) + '...',
+        defaultModel: config.openai.model,
+        timeout: config.openai.timeout,
+      },
+      'Initializing OpenAI client'
+    );
+
     this.client = new OpenAI({
       apiKey: config.openai.apiKey,
       timeout: config.openai.timeout,
@@ -116,7 +128,19 @@ export class LLMService {
       }
 
       return response;
-    } catch (error) {
+    } catch (error: any) {
+      // Log error details before re-throwing
+      logger.error(
+        {
+          errorType: error?.constructor?.name,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          errorStack: error instanceof Error ? error.stack : undefined,
+          errorCode: error?.code,
+          errorStatus: error?.status,
+        },
+        'LLM Service error in method'
+      );
+
       if (error instanceof Error) {
         throw new Error(`LLM error: ${error.message}`);
       }
@@ -181,7 +205,49 @@ export class LLMService {
         completionRequest.response_format = options.responseFormat;
       }
 
-      const completion = await this.client.chat.completions.create(completionRequest);
+      // Log request details before API call
+      logger.debug(
+        {
+          requestDetails: {
+            model: completionRequest.model,
+            hasResponseFormat: !!completionRequest.response_format,
+            responseFormatType: completionRequest.response_format?.type,
+            messageCount: completionRequest.messages.length,
+            temperature: completionRequest.temperature,
+            maxTokens: completionRequest.max_tokens,
+          },
+        },
+        'About to call OpenAI API with raw messages'
+      );
+
+      let completion;
+      try {
+        const apiCallStart = Date.now();
+        completion = await this.client.chat.completions.create(completionRequest);
+        logger.debug(
+          { duration: Date.now() - apiCallStart },
+          'OpenAI API call completed successfully'
+        );
+      } catch (apiError: any) {
+        // Comprehensive error logging
+        logger.error(
+          {
+            errorType: apiError?.constructor?.name,
+            errorMessage: apiError?.message || String(apiError),
+            errorCode: apiError?.code,
+            errorStatus: apiError?.status,
+            errorStatusText: apiError?.statusText,
+            errorResponse: apiError?.response?.data,
+            errorHeaders: apiError?.response?.headers,
+            fullError: JSON.stringify(apiError, Object.getOwnPropertyNames(apiError)),
+            requestModel: completionRequest.model,
+            hasResponseFormat: !!completionRequest.response_format,
+            responseFormatType: completionRequest.response_format?.type,
+          },
+          'OpenAI API call failed - detailed error'
+        );
+        throw apiError;
+      }
 
       const response = completion.choices[0]?.message?.content ?? '';
 
@@ -206,7 +272,19 @@ export class LLMService {
       }
 
       return response;
-    } catch (error) {
+    } catch (error: any) {
+      // Log error details before re-throwing
+      logger.error(
+        {
+          errorType: error?.constructor?.name,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          errorStack: error instanceof Error ? error.stack : undefined,
+          errorCode: error?.code,
+          errorStatus: error?.status,
+        },
+        'LLM Service error in method'
+      );
+
       if (error instanceof Error) {
         throw new Error(`LLM error: ${error.message}`);
       }

@@ -119,7 +119,7 @@ Consider:
 - Does the context suggest they're answering this goal question vs something else?
 - Could this be a response to a different domain's question (e.g., finance, health)?
 
-Return JSON with:
+Return a valid JSON object with the following structure:
 {
   "isSelection": true/false,
   "selectedIndex": 1-based index or null,
@@ -133,7 +133,7 @@ Examples of selection responses:
 - "books" or "exercise" → selecting by keyword from goal title
 - "the reading one" → selecting by description
 
-If unsure or the message seems unrelated to goal selection, return {"isSelection": false, "reasoning": "why not"}.`;
+If unsure or the message seems unrelated to goal selection, return JSON: {"isSelection": false, "reasoning": "why not"}.`;
 
       try {
         const content = await llmService.generateFromMessages(
@@ -206,6 +206,9 @@ If unsure or the message seems unrelated to goal selection, return {"isSelection
     context: ExtractionContext
   ): Promise<GoalData | null> {
     const prompt = this.buildExtractionPrompt(message, context);
+    const startTime = Date.now();
+
+    logger.debug({ startTime, message }, 'Starting goal extraction LLM call');
 
     try {
       const content = await llmService.generateFromMessages(
@@ -226,6 +229,11 @@ If unsure or the message seems unrelated to goal selection, return {"isSelection
         }
       );
 
+      logger.debug(
+        { duration: Date.now() - startTime },
+        'Goal extraction LLM call completed successfully'
+      );
+
       if (!content) return null;
 
       // Parse JSON response
@@ -238,13 +246,53 @@ If unsure or the message seems unrelated to goal selection, return {"isSelection
       }
 
       return parsed as GoalData;
-    } catch (error) {
-      // More detailed error logging
-      if (error instanceof SyntaxError) {
-        logger.error({ error, message }, 'Failed to parse JSON from LLM response');
-      } else {
-        logger.error({ error, message }, 'Failed to extract goal data using LLM');
+    } catch (error: any) {
+      const duration = Date.now() - startTime;
+
+      // Create comprehensive error details
+      const errorDetails: any = {
+        duration,
+        errorType: error?.constructor?.name,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined,
+        errorString: String(error),
+        errorProps: {},
+        message,
+      };
+
+      // Capture all enumerable properties
+      if (error && typeof error === 'object') {
+        for (const key of Object.keys(error)) {
+          try {
+            errorDetails.errorProps[key] = error[key];
+          } catch (e) {
+            errorDetails.errorProps[key] = '<unable to serialize>';
+          }
+        }
       }
+
+      // Try to get more error info using Object.getOwnPropertyNames
+      if (error && typeof error === 'object') {
+        const allProps = Object.getOwnPropertyNames(error);
+        errorDetails.allPropertyNames = allProps;
+        for (const prop of allProps) {
+          if (!errorDetails.errorProps[prop]) {
+            try {
+              errorDetails.errorProps[prop] = error[prop];
+            } catch (e) {
+              errorDetails.errorProps[prop] = '<unable to access>';
+            }
+          }
+        }
+      }
+
+      // Log detailed error
+      if (error instanceof SyntaxError) {
+        logger.error(errorDetails, 'Failed to parse JSON from LLM response - detailed');
+      } else {
+        logger.error(errorDetails, 'Failed to extract goal data using LLM - detailed');
+      }
+
       return null;
     }
   }
@@ -255,7 +303,7 @@ If unsure or the message seems unrelated to goal selection, return {"isSelection
   protected buildExtractionPrompt(message: string, context: ExtractionContext): string {
     const goalContext = context.domainContext as GoalContext;
 
-    return `Extract goal and progress tracking information from this message.
+    return `Extract goal and progress tracking information from this message and return a valid JSON object.
 
 User message: "${message}"
 
@@ -307,9 +355,9 @@ Extract relevant details:
 - For check_progress: goalId (if specific goal mentioned)
 - For update_goal: goalId, new values
 
-If the message is NOT related to goals/progress, return: {"action": null, "confidence": 0}
+Return ONLY a valid JSON object. If the message is NOT related to goals/progress, return: {"action": null, "confidence": 0}
 
-Examples:
+Examples (all responses must be valid JSON):
 - "I want to set a goal to read 12 books this year" → {"action": "set_goal", "goalTitle": "Read 12 books this year", "targetValue": 12, "progressUnit": "books", "confidence": 0.95}
 - "I want to track my goal of reading 20 books, how does it work?" → {"action": "check_progress", "confidence": 0.7} (asking about tracking, not setting)
 - "Can you help me track my reading progress?" → {"action": null, "confidence": 0} (just asking for help)
