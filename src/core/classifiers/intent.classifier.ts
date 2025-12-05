@@ -1,3 +1,13 @@
+/**
+ * @deprecated This classifier is no longer used.
+ * The unified classifier (unified.classifier.ts) now handles intent classification
+ * in a single LLM call for better performance.
+ *
+ * Kept as reference for the original intent classification logic and prompts.
+ *
+ * @see unified.classifier.ts - Current implementation
+ */
+
 // Intent Classifier - Identifies user intent and suggests conversation mode
 
 import { BaseClassifier } from './base.classifier.js';

@@ -1,3 +1,13 @@
+/**
+ * @deprecated This classifier is no longer used.
+ * The unified classifier (unified.classifier.ts) now handles domain classification
+ * in a single LLM call for better performance.
+ *
+ * Kept as reference for the original domain classification logic and prompts.
+ *
+ * @see unified.classifier.ts - Current implementation
+ */
+
 // Domain Relevance Classifier - Determines which domains are relevant to a message
 import { BaseClassifier } from './base.classifier.js';
 import { logger } from '@/core/logger.js';

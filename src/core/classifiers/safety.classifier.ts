@@ -1,3 +1,13 @@
+/**
+ * @deprecated This classifier is no longer used.
+ * The unified classifier (unified.classifier.ts) now handles safety classification
+ * in a single LLM call for better performance.
+ *
+ * Kept as reference for the original safety classification logic and prompts.
+ *
+ * @see unified.classifier.ts - Current implementation
+ */
+
 // Safety Classifier - Detects crisis situations and safety concerns
 
 import { BaseClassifier } from './base.classifier.js';
