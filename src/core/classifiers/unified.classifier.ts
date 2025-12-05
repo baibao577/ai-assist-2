@@ -108,132 +108,42 @@ export class UnifiedClassifier extends BaseClassifier<
     );
 
     return this.callLLM(input, {
-      maxTokens: 800,
+      maxTokens: 300, // Reduced from 800 - compressed prompt needs fewer tokens
       temperature: 0.2,
     });
   }
 
   protected buildPrompt(input: UnifiedClassificationInput): string {
-    const messageHistory =
+    // Get last 2 messages only (reduced from 5)
+    const context =
       input.recentMessages.length > 0
         ? input.recentMessages
-            .slice(-5)
-            .map((m) => `${m.role}: ${m.content}`)
-            .join('\n')
-        : 'No previous messages';
+            .slice(-2)
+            .map((m) => `${m.role}: ${m.content.substring(0, 100)}`)
+            .join(' | ')
+        : '';
 
-    // Get available domains dynamically
+    // Get domain IDs only (not descriptions)
     const domains = domainRegistry.getActiveDomains();
-    const domainDescriptions = domains
-      .map((d) => `- ${d.id}: ${d.description || d.name}`)
-      .join('\n');
+    const domainIds = domains.map((d) => d.id).join('|');
 
-    return `You are a unified classifier for a men's health wellness assistant. Analyze the message for safety, intent, domain relevance, and multi-intent detection in a single pass.
+    // COMPRESSED PROMPT: ~300 tokens instead of ~850
+    return `Classify message. Return JSON only.
+Mode: ${input.currentMode}${context ? ` | Context: ${context}` : ''}
+Message: "${input.message}"
 
-**Conversation Context:**
-${messageHistory}
+safety: safe|concern|crisis (crisis=self-harm/emergency)
+intent: greeting|farewell|casual_chat|seek_advice|ask_question|share_problem|set_goal|view_goals|log_progress|check_progress|update_goal|how_works|about_system|help|unclear
+mode: SMALLTALK(casual)|CONSULT(advice)|META(system)|TRACK_PROGRESS(goals)
+domains: ${domainIds} (only if extractable data present)
+entities: [{type:topic|emotion|goal|health_concern, value, confidence}]
+multiIntent: true only if 2+ distinct modes needed
 
-**Current Mode:** ${input.currentMode}
-**Current Safety Level:** ${input.currentSafetyLevel}
-
-**Current User Message:** "${input.message}"
-
----
-
-## TASK 1: SAFETY CLASSIFICATION
-Detect crisis situations and safety concerns.
-
-Safety Levels:
-- safe: Normal conversation, no concerns
-- concern: Mild emotional distress, needs empathetic response
-- crisis: Severe distress, self-harm indicators, requires crisis resources
-
----
-
-## TASK 2: INTENT CLASSIFICATION
-Identify the primary user intent.
-
-**Available Intents:**
-
-CONSULT MODE (advice and problem-solving):
-- seek_advice: User asking for guidance or recommendations
-- ask_question: User has a specific question
-- share_problem: User describing a problem or concern
-
-SMALLTALK MODE (casual conversation):
-- greeting: Hi, hello, how are you
-- casual_chat: General chitchat
-- farewell: Goodbye, see you later
-
-META MODE (questions about the assistant):
-- how_works: How does this assistant work?
-- about_system: What can you do?
-- help: I need help using this
-
-TRACK_PROGRESS MODE (goal setting and tracking):
-- set_goal: User wants to set a new goal
-- view_goals: User wants to see their goals
-- log_progress: User logging progress on a goal
-- check_progress: User wants analytics
-- update_goal: User wants to modify a goal
-
-UNCLEAR:
-- unclear: Cannot determine clear intent
-
-**Entity Types to Extract:**
-- topic: Main topics (sleep, exercise, stress)
-- emotion: Emotional states (anxious, happy, frustrated)
-- goal: Goals mentioned (lose weight, improve sleep)
-- health_concern: Health issues (insomnia, back pain)
-
----
-
-## TASK 3: DOMAIN RELEVANCE
-Identify which domains need data extraction.
-
-**Available Domains:**
-${domainDescriptions}
-
-Only include domains where the message contains relevant information to extract.
-
----
-
-## TASK 4: MULTI-INTENT DETECTION
-Determine if the message contains multiple distinct intents.
-
-Examples:
-- "Hi, I want to set a goal" → Multi-intent: SMALLTALK + TRACK_PROGRESS
-- "How can I improve my sleep?" → Single intent: CONSULT
-- "What are my goals? Also, what can you help with?" → Multi-intent: TRACK_PROGRESS + META
-
-Conflicting intents are when intents require different response styles (e.g., casual vs serious).
-
----
-
-**Output ONLY valid JSON:**
-{
-  "safety": {
-    "level": "safe" | "concern" | "crisis",
-    "signals": ["detected signals if any"],
-    "suggestedTone": "normal" | "empathetic" | "urgent",
-    "requiresHumanEscalation": false
-  },
-  "intent": {
-    "primary": "intent_type",
-    "suggestedMode": "CONSULT" | "SMALLTALK" | "META" | "TRACK_PROGRESS",
-    "entities": [
-      {"type": "topic|emotion|goal|health_concern", "value": "extracted value", "confidence": 0.0-1.0}
-    ],
-    "reasoning": "Brief explanation"
-  },
-  "relevantDomains": ["domain_ids that need extraction"],
-  "multiIntent": {
-    "isMultiIntent": false,
-    "detectedModes": ["modes detected"],
-    "hasConflictingIntents": false
-  },
-  "confidence": 0.0-1.0
-}`;
+"safety":{"level":"safe","signals":[],"suggestedTone":"normal","requiresHumanEscalation":false},
+"intent":{"primary":"seek_advice","suggestedMode":"CONSULT","entities":[{"type":"topic","value":"sleep","confidence":0.9}],"reasoning":"asking for advice"},
+"relevantDomains":["health"],
+"multiIntent":{"isMultiIntent":false,"detectedModes":["CONSULT"],"hasConflictingIntents":false},
+"confidence":0.9}`;
   }
 
   protected parseResponse(response: string): UnifiedClassificationResult {
