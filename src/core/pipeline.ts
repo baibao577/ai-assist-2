@@ -12,9 +12,11 @@
  *    - Applies time-based decay to context elements and goals
  *    - Maintains memory freshness based on configured half-life values
  *
- * 3. CLASSIFICATION STAGE (Sequential)
- *    - Safety Classifier: Detects crisis/concern/safe levels
- *    - Intent Classifier: Determines user intent and suggests mode
+ * 3. CLASSIFICATION STAGE (Unified)
+ *    - Single LLM call classifies: Safety, Intent, Domain relevance, Multi-intent
+ *    - Safety: Detects crisis/concern/safe levels
+ *    - Intent: Determines user intent and suggests mode
+ *    - Multi-intent: Detects if message requires multiple mode handlers
  *    - Arbiter: Makes final routing decision, applies safety overrides
  *
  * 4. PARALLEL ENRICHMENT STAGE (3 Parallel Groups)
@@ -23,8 +25,10 @@
  *    - Group 3: Steering strategy generation (all strategies in parallel)
  *
  * 5. HANDLER STAGE
- *    - Routes to appropriate mode handler (CONSULT/SMALLTALK/META)
- *    - Generates contextual response using enriched state
+ *    - Single Intent: Routes directly to mode handler (CONSULT/SMALLTALK/META/TRACK_PROGRESS)
+ *    - Multi-Intent: Uses ResponseOrchestrator for coordinated multi-mode responses
+ *    - Lazy Initialization: Primary response first, secondary only if valuable
+ *    - Smart Composition: Simple concatenation or LLM blending based on conflict detection
  *
  * 6. SAVE STAGE
  *    - Persists messages and updated state to database
