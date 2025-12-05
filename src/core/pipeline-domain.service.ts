@@ -2,16 +2,17 @@
  * Pipeline Domain Service
  * =======================
  * Handles all domain-related operations for the pipeline including:
- * - Domain classification and relevance detection
  * - Data extraction from domains
  * - Domain history management
  * - Steering hint generation
  * - Domain state merging and persistence
+ *
+ * Note: Domain classification is now handled by the unified classifier.
+ * @see unified.classifier.ts
  */
 
 import { logger } from '@/core/logger.js';
 import { config } from '@/config/index.js';
-import { DomainRelevanceClassifier } from '@/core/classifiers/index.js';
 import {
   domainRegistry,
   extractorRegistry,
@@ -37,44 +38,6 @@ export interface SteeringResult {
 }
 
 export class PipelineDomainService {
-  private domainClassifier: DomainRelevanceClassifier;
-
-  constructor() {
-    this.domainClassifier = new DomainRelevanceClassifier();
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // DOMAIN CLASSIFICATION
-  // ═══════════════════════════════════════════════════════════════════════
-
-  /**
-   * Classify which domains are relevant for the conversation
-   */
-  async classifyDomainsAsync(state: ConversationState): Promise<DomainDefinition[]> {
-    // Check if domain system is enabled
-    if (!domainConfig.isEnabled()) {
-      logger.debug('Domain system disabled');
-      return [];
-    }
-
-    // Classify domains using the domain relevance classifier
-    const relevantDomains = await this.domainClassifier.classifyDomains(state);
-
-    // Filter to only enabled domains
-    const enabledDomains = relevantDomains.filter((d) => domainConfig.isDomainEnabled(d.id));
-
-    logger.debug(
-      {
-        totalRelevant: relevantDomains.length,
-        enabledRelevant: enabledDomains.length,
-        domains: enabledDomains.map((d) => ({ id: d.id, priority: d.priority })),
-      },
-      'Domain classification complete'
-    );
-
-    return enabledDomains;
-  }
-
   // ═══════════════════════════════════════════════════════════════════════
   // DOMAIN EXTRACTION
   // ═══════════════════════════════════════════════════════════════════════

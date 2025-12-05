@@ -435,7 +435,7 @@ export class Pipeline {
     // Get domain definitions from unified result (NO LLM CALL - already classified!)
     const domainClassification = unifiedResult
       ? unifiedClassifier.toDomainDefinitions(unifiedResult)
-      : await pipelineDomainService.classifyDomainsAsync(stateWithMessages); // Fallback
+      : []; // No fallback - unified classifier handles domain classification
 
     // Preserve existing global stage logging
     logger.info(
