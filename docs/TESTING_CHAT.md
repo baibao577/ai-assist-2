@@ -235,3 +235,12 @@ Background Context: topic: time management
 - "Good morning! Can you explain how goal tracking works and show me my current goals?"
   - Triggers: SMALLTALK + META + TRACK_PROGRESS
   - Expected: Greeting → System explanation → Goal display
+
+---
+
+"Hi there! I want to track my goal of reading 20 books this year. Can you help me understand how the tracking works?" - Should NOT create a goal, just explain
+
+"I want to set a goal to read 12 books this year" - Should create a goal
+"Hello! How's my progress looking?" - Should trigger multi-intent orchestration efficiently
+
+I have a trouble with sleep lately, any recommendation. Should i set a goal on it to improve myself?
