@@ -9,6 +9,14 @@
 import { z } from 'zod';
 
 // ============================================================================
+// Helpers - Convert null to undefined for cleaner types
+// ============================================================================
+
+/** Accepts null from LLM but converts to undefined for type safety */
+const optionalString = z.preprocess((val) => val ?? undefined, z.string().optional());
+const optionalNumber = z.preprocess((val) => val ?? undefined, z.number().optional());
+
+// ============================================================================
 // Core Goal Data Schema
 // ============================================================================
 
@@ -26,28 +34,26 @@ export const GoalDataSchema = z.object({
     ])
     .nullable(),
 
-  // Goal information
-  goalId: z.string().optional(),
-  goalTitle: z.string().optional(),
-  goalCategory: z.string().optional(),
+  // Goal information (LLM may return null, converted to undefined)
+  goalId: optionalString,
+  goalTitle: optionalString,
+  goalCategory: optionalString,
 
   // Progress information
-  progressValue: z.number().optional(),
-  progressNotes: z.string().optional(),
-  progressUnit: z.string().optional(),
+  progressValue: optionalNumber,
+  progressNotes: optionalString,
+  progressUnit: optionalString,
 
   // For goal creation
-  targetValue: z.number().optional(),
-  targetDate: z.string().optional(),
-  baselineValue: z.number().optional(),
+  targetValue: optionalNumber,
+  targetDate: optionalString,
+  baselineValue: optionalNumber,
 
   // For clarification responses
-  selection: z
-    .union([
-      z.number(), // User selected by number: "1", "2", etc.
-      z.string(), // User selected by keyword: "books", "exercise"
-    ])
-    .optional(),
+  selection: z.preprocess(
+    (val) => val ?? undefined,
+    z.union([z.number(), z.string()]).optional()
+  ),
 
   // Context from previous interactions
   pendingContext: z
@@ -69,7 +75,7 @@ export const GoalDataSchema = z.object({
 
   // Metadata
   confidence: z.number().min(0).max(1).default(0.5),
-  extractedFrom: z.string().optional(), // Which part of message
+  extractedFrom: optionalString, // Which part of message
 });
 
 export type GoalData = z.infer<typeof GoalDataSchema>;

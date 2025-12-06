@@ -26,6 +26,46 @@ import {
 import type { DomainDefinition } from '@/core/domains/types.js';
 
 // ============================================================================
+// Intent Configuration - Single Source of Truth
+// ============================================================================
+
+interface IntentConfig {
+  mode: ConversationMode;
+  type: IntentType;
+}
+
+/**
+ * Single source of truth for intent → mode/type mapping.
+ * - Keys: intent strings used in LLM prompt
+ * - Values: mode and IntentType for parsing
+ */
+const INTENT_CONFIG: Record<string, IntentConfig> = {
+  // SMALLTALK mode intents
+  greeting: { mode: ConversationMode.SMALLTALK, type: IntentType.GREETING },
+  farewell: { mode: ConversationMode.SMALLTALK, type: IntentType.FAREWELL },
+  casual_chat: { mode: ConversationMode.SMALLTALK, type: IntentType.CASUAL_CHAT },
+  // CONSULT mode intents
+  seek_advice: { mode: ConversationMode.CONSULT, type: IntentType.SEEK_ADVICE },
+  ask_question: { mode: ConversationMode.CONSULT, type: IntentType.ASK_QUESTION },
+  share_problem: { mode: ConversationMode.CONSULT, type: IntentType.SHARE_PROBLEM },
+  // META mode intents
+  how_works: { mode: ConversationMode.META, type: IntentType.HOW_WORKS },
+  about_system: { mode: ConversationMode.META, type: IntentType.ABOUT_SYSTEM },
+  help: { mode: ConversationMode.META, type: IntentType.HELP },
+  // TRACK_PROGRESS mode intents
+  set_goal: { mode: ConversationMode.TRACK_PROGRESS, type: IntentType.SET_GOAL },
+  view_goals: { mode: ConversationMode.TRACK_PROGRESS, type: IntentType.VIEW_GOALS },
+  log_progress: { mode: ConversationMode.TRACK_PROGRESS, type: IntentType.LOG_PROGRESS },
+  check_progress: { mode: ConversationMode.TRACK_PROGRESS, type: IntentType.CHECK_PROGRESS },
+  update_goal: { mode: ConversationMode.TRACK_PROGRESS, type: IntentType.UPDATE_GOAL },
+  // Fallback
+  unclear: { mode: ConversationMode.SMALLTALK, type: IntentType.UNCLEAR },
+};
+
+/** Generated from INTENT_CONFIG keys - used in prompt */
+const INTENT_LIST = Object.keys(INTENT_CONFIG).join('|');
+
+// ============================================================================
 // Types
 // ============================================================================
 
@@ -133,16 +173,16 @@ Mode: ${input.currentMode}${context ? ` | Context: ${context}` : ''}
 Message: "${input.message}"
 
 safety: safe|concern|crisis (crisis=self-harm/emergency)
-intent: greeting|farewell|casual_chat|seek_advice|ask_question|share_problem|set_goal|view_goals|log_progress|check_progress|update_goal|how_works|about_system|help|unclear
+intent: ${INTENT_LIST}
 mode: SMALLTALK(casual)|CONSULT(advice)|META(system)|TRACK_PROGRESS(goals)
 domains: ${domainIds} (only if extractable data present)
 entities: [{type:topic|emotion|goal|health_concern, value, confidence}]
 multiIntent: true only if 2+ distinct modes needed
 
 "safety":{"level":"safe","signals":[],"suggestedTone":"normal","requiresHumanEscalation":false},
-"intent":{"primary":"seek_advice","suggestedMode":"CONSULT","entities":[{"type":"topic","value":"sleep","confidence":0.9}],"reasoning":"asking for advice"},
-"relevantDomains":["health"],
-"multiIntent":{"isMultiIntent":false,"detectedModes":["CONSULT"],"hasConflictingIntents":false},
+"intent":{"primary":"seek_advice","secondary":"set_goal","suggestedMode":"TRACK_PROGRESS","entities":[{"type":"goal","value":"reading 20 books","confidence":0.9}],"reasoning":"asking about tracking AND wants to set goal"},
+"relevantDomains":["goal"],
+"multiIntent":{"isMultiIntent":true,"detectedModes":["CONSULT","TRACK_PROGRESS"],"hasConflictingIntents":false},
 "confidence":0.9}`;
   }
 
@@ -170,11 +210,16 @@ multiIntent: true only if 2+ distinct modes needed
 
       relevantDomains: this.validateDomains(parsed.relevantDomains || []),
 
-      multiIntent: {
-        isMultiIntent: parsed.multiIntent?.isMultiIntent || false,
-        detectedModes: (parsed.multiIntent?.detectedModes || []).map((m) => this.mapMode(m)),
-        hasConflictingIntents: parsed.multiIntent?.hasConflictingIntents || false,
-      },
+      // Multi-intent detection - use extracted modes to determine if multi-intent
+      multiIntent: (() => {
+        const detectedModes = this.extractDetectedModes(parsed);
+        const isMultiIntent = detectedModes.length > 1 || (parsed.multiIntent?.isMultiIntent || false);
+        return {
+          isMultiIntent,
+          detectedModes,
+          hasConflictingIntents: parsed.multiIntent?.hasConflictingIntents || false,
+        };
+      })(),
     };
 
     logger.info(
@@ -271,6 +316,40 @@ multiIntent: true only if 2+ distinct modes needed
   // Private Helpers
   // ============================================================================
 
+  /**
+   * Maps intent string to mode for multi-intent detection (uses INTENT_CONFIG)
+   */
+  private intentToMode(intent: string): ConversationMode | null {
+    return INTENT_CONFIG[intent]?.mode || null;
+  }
+
+  /**
+   * Extracts all detected modes from primary/secondary intents and explicit modes
+   */
+  private extractDetectedModes(parsed: UnifiedLLMResponse): ConversationMode[] {
+    const modes: Set<ConversationMode> = new Set();
+
+    // Add primary intent's mode (already ConversationMode from intentToMode)
+    const primaryMode = this.intentToMode(parsed.intent.primary);
+    if (primaryMode) modes.add(primaryMode);
+
+    // Add secondary intent's mode (if different)
+    const intentWithSecondary = parsed.intent as { secondary?: string };
+    if (intentWithSecondary.secondary) {
+      const secondaryMode = this.intentToMode(intentWithSecondary.secondary);
+      if (secondaryMode && secondaryMode !== primaryMode) {
+        modes.add(secondaryMode);
+      }
+    }
+
+    // Add explicitly listed modes from multiIntent (need to map string → enum)
+    if (parsed.multiIntent?.detectedModes) {
+      parsed.multiIntent.detectedModes.forEach((m) => modes.add(this.mapMode(m)));
+    }
+
+    return [...modes];
+  }
+
   private mapSafetyLevel(level: string): SafetyLevel {
     const levelMap: Record<string, SafetyLevel> = {
       safe: SafetyLevel.SAFE,
@@ -280,25 +359,11 @@ multiIntent: true only if 2+ distinct modes needed
     return levelMap[level] || SafetyLevel.SAFE;
   }
 
+  /**
+   * Maps intent string to IntentType enum (uses INTENT_CONFIG)
+   */
   private mapIntent(intent: string): IntentType {
-    const intentMap: Record<string, IntentType> = {
-      seek_advice: IntentType.SEEK_ADVICE,
-      ask_question: IntentType.ASK_QUESTION,
-      share_problem: IntentType.SHARE_PROBLEM,
-      greeting: IntentType.GREETING,
-      casual_chat: IntentType.CASUAL_CHAT,
-      farewell: IntentType.FAREWELL,
-      how_works: IntentType.HOW_WORKS,
-      about_system: IntentType.ABOUT_SYSTEM,
-      help: IntentType.HELP,
-      set_goal: IntentType.SET_GOAL,
-      view_goals: IntentType.VIEW_GOALS,
-      log_progress: IntentType.LOG_PROGRESS,
-      check_progress: IntentType.CHECK_PROGRESS,
-      update_goal: IntentType.UPDATE_GOAL,
-      unclear: IntentType.UNCLEAR,
-    };
-    return intentMap[intent] || IntentType.UNCLEAR;
+    return INTENT_CONFIG[intent]?.type || IntentType.UNCLEAR;
   }
 
   private mapMode(mode: string): ConversationMode {
